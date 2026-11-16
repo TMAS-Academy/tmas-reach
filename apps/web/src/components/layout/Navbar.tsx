@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import type { User, UserRole } from '../../types'
 import { formatRoleLabel } from '../../lib/rbac'
 import tmasLogo from '../../assets/tmas-logo.jpg'
@@ -10,6 +11,8 @@ import {
   Shield,
   ExternalLink,
   ChevronDown,
+  Sun,
+  Moon,
 } from 'lucide-react'
 
 export type TabKey =
@@ -35,6 +38,19 @@ export function Navbar({
   onRoleChange,
 }: NavbarProps) {
   const isAdmin = currentUser.role === 'administrator'
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('tmas_theme') === 'dark'
+  })
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('tmas_theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('tmas_theme', 'light')
+    }
+  }, [isDark])
 
   const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
@@ -77,6 +93,15 @@ export function Navbar({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsDark((d) => !d)}
+            className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
           <button
             type="button"
             onClick={() => onSelectTab('unsubscribe')}

@@ -34,6 +34,8 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [historyContact, setHistoryContact] = useState<Contact | null>(null)
   const [rbacAlert, setRbacAlert] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
 
   const handleExportCsv = () => {
     const headers = 'email,first_name,last_name,organization,job_role,audience_tag,status'
@@ -46,7 +48,7 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `tmas_reach_contacts_${Date.now()}.csv`
+    a.download = 'tmas_reach_contacts.csv'
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -71,22 +73,26 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
     }
   }, [contacts])
 
-  const filteredContacts = useMemo(() => {
-    return contacts.filter((c) => {
-      const query = searchTerm.toLowerCase()
-      const matchesSearch =
-        !query ||
-        c.email.toLowerCase().includes(query) ||
-        `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(query) ||
-        (c.organization && c.organization.toLowerCase().includes(query)) ||
-        (c.job_role && c.job_role.toLowerCase().includes(query))
+  const filteredContacts = contacts.filter((c) => {
+    const query = searchTerm.toLowerCase()
+    const matchesSearch =
+      !query ||
+      c.email.toLowerCase().includes(query) ||
+      `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(query) ||
+      (c.organization && c.organization.toLowerCase().includes(query)) ||
+      (c.job_role && c.job_role.toLowerCase().includes(query))
 
-      const matchesTag = selectedTag === 'all' || c.audience_tag === selectedTag
-      const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus
+    const matchesTag = selectedTag === 'all' || c.audience_tag === selectedTag
+    const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus
 
-      return matchesSearch && matchesTag && matchesStatus
-    })
-  }, [contacts, searchTerm, selectedTag, selectedStatus])
+    return matchesSearch && matchesTag && matchesStatus
+  })
+
+  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / PAGE_SIZE))
+  const paginatedContacts = filteredContacts.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  )
 
   const handleStatusChange = (contact: Contact, newStatus: ContactStatus) => {
     if (newStatus === 'suppressed' && !canSuppress) {
@@ -241,14 +247,14 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredContacts.length === 0 ? (
+            {paginatedContacts.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
                   No contacts found matching the filters.
                 </td>
               </tr>
             ) : (
-              filteredContacts.map((contact) => (
+              paginatedContacts.map((contact) => (
                 <tr key={contact.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900 dark:text-white">
@@ -325,6 +331,48 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
             )}
           </tbody>
         </table>
+
+        {filteredContacts.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-800 text-xs text-slate-500">
+            <div>
+              Showing{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {(currentPage - 1) * PAGE_SIZE + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {Math.min(currentPage * PAGE_SIZE, filteredContacts.length)}
+              </span>{' '}
+              of{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {filteredContacts.length}
+              </span>{' '}
+              contacts
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Previous
+              </button>
+              <span className="px-2 font-mono">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {isFormOpen && (

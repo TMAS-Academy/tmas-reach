@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { store } from './lib/store'
 import type { UserRole } from './types'
 import { Navbar, type TabKey } from './components/layout/Navbar'
+import { ToastContainer, type ToastMessage } from './components/ui/Toast'
 import { ContactList } from './components/contacts/ContactList'
 import { TemplateList } from './components/templates/TemplateList'
 import { CampaignList } from './components/campaigns/CampaignList'
@@ -13,11 +14,20 @@ import './App.css'
 
 export default function App() {
   const [, setTick] = useState(0)
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab') as TabKey | null
     return tabParam || 'contacts'
   })
+
+  const addToast = useCallback((type: 'success' | 'error' | 'info', text: string) => {
+    setToasts((prev) => [...prev, { id: `toast-${Date.now()}-${Math.random()}`, type, text }])
+  }, [])
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
@@ -35,6 +45,7 @@ export default function App() {
 
   const handleRoleChange = (role: UserRole) => {
     store.setCurrentRole(role)
+    addToast('info', `Active role switched to ${role}`)
     if (role !== 'administrator' && activeTab === 'admin') {
       setActiveTab('contacts')
     }
@@ -97,7 +108,10 @@ export default function App() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => store.resetToDefault()}
+              onClick={() => {
+                store.resetToDefault()
+                addToast('success', 'Reset demo seed data')
+              }}
               className="hover:underline text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             >
               Reset Demo Seed Data
@@ -106,6 +120,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   )
 }
