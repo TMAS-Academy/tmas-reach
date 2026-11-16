@@ -1,5 +1,6 @@
 import type { User, UserRole } from '../../types'
 import { formatRoleLabel } from '../../lib/rbac'
+import tmasLogo from '../../assets/tmas-logo.jpg'
 import {
   Users,
   FileText,
@@ -55,9 +56,11 @@ export function Navbar({
     <header className="border-b border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-sm shadow-sm">
-            TR
-          </div>
+          <img
+            src={tmasLogo}
+            alt="TMAS Academy"
+            className="h-10 w-10 rounded-lg object-contain bg-black shadow-sm"
+          />
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
