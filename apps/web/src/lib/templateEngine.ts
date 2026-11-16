@@ -1,4 +1,4 @@
-import { Contact, EmailTemplate } from '../types'
+import type { Contact, EmailTemplate } from '../types'
 
 export interface RenderContext {
   contact?: Partial<Contact>

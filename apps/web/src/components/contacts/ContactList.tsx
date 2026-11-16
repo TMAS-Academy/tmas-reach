@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Contact, ContactStatus, UserRole } from '../../types'
+import type { Contact, ContactStatus, UserRole } from '../../types'
 import { hasPermission } from '../../lib/rbac'
 import { store } from '../../lib/store'
 import { ContactFormModal } from './ContactFormModal'

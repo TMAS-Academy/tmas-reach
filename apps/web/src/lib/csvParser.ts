@@ -1,4 +1,4 @@
-import { Contact, ContactStatus } from '../types'
+import type { Contact, ContactStatus } from '../types'
 
 export interface ParsedContactRow {
   email: string

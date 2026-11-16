@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EmailTemplate } from '../../types'
+import type { EmailTemplate } from '../../types'
 import { TemplateEditorModal } from './TemplateEditorModal'
 import { Plus, Edit2, FileText, CheckCircle, AlertTriangle } from 'lucide-react'
 

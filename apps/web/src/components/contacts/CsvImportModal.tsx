@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Contact } from '../../types'
+import type { Contact } from '../../types'
 import { parseCsvContent } from '../../lib/csvParser'
 import { store } from '../../lib/store'
 import { X, Upload, AlertTriangle, CheckCircle, ShieldAlert, FileText, Download } from 'lucide-react'

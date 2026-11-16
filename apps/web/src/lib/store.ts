@@ -1,4 +1,4 @@
-import {
+import type {
   ActivityLog,
   Campaign,
   CampaignRecipient,
@@ -8,7 +8,7 @@ import {
   User,
   UserRole,
 } from '../types'
-import { renderTemplateString, validateCampaignPreApproval } from './templateEngine'
+import { validateCampaignPreApproval } from './templateEngine'
 
 const SEED_USERS: User[] = [
   {
@@ -420,7 +420,7 @@ export class AppStore {
           ]
           fields.forEach((f) => {
             if (!existing[f] && row[f]) {
-              ;(existing as Record<string, unknown>)[f] = row[f]
+              ;(existing as unknown as Record<string, unknown>)[f] = row[f]
               updated = true
             }
           })

@@ -1,52 +1,6 @@
-.app {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 48px 24px;
-}
-
-header {
-  margin-bottom: 40px;
-}
-
-header h1 {
-  font-size: 40px;
-  margin: 0 0 8px;
-}
-
-header p {
-  margin: 0;
-  font-size: 18px;
-  color: var(--text);
-}
-
-.status {
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 32px;
-}
-
-.status p {
-  margin: 0;
-}
-
-.roles h2 {
-  font-size: 22px;
-  margin: 0 0 12px;
-}
-
-.roles ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+/* Base styles complement Tailwind */
+#root {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.roles li {
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  text-align: left;
 }

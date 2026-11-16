@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EmailTemplate } from '../../types'
+import type { EmailTemplate } from '../../types'
 import { store } from '../../lib/store'
 import { X } from 'lucide-react'
 

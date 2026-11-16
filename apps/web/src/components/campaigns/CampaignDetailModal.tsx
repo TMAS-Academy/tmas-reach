@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Campaign, Contact, EmailTemplate, UserRole } from '../../types'
+import type { Campaign, Contact, EmailTemplate, UserRole } from '../../types'
 import { store } from '../../lib/store'
 import { hasPermission } from '../../lib/rbac'
 import { renderTemplateString, validateCampaignPreApproval } from '../../lib/templateEngine'

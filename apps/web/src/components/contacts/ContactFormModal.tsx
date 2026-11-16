@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Contact } from '../../types'
+import type { Contact } from '../../types'
 import { store } from '../../lib/store'
 import { X } from 'lucide-react'
 
