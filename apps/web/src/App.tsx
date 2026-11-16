@@ -51,7 +51,11 @@ export default function App() {
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
         {activeTab === 'contacts' && (
-          <ContactList contacts={contacts} userRole={currentUser.role} />
+          <ContactList
+            contacts={contacts}
+            campaigns={campaigns}
+            userRole={currentUser.role}
+          />
         )}
 
         {activeTab === 'templates' && <TemplateList templates={templates} />}

@@ -1,34 +1,55 @@
 import { useState, useMemo } from 'react'
-import type { Contact, ContactStatus, UserRole } from '../../types'
+import type { Contact, ContactStatus, UserRole, Campaign } from '../../types'
 import { hasPermission } from '../../lib/rbac'
 import { store } from '../../lib/store'
 import { ContactFormModal } from './ContactFormModal'
 import { CsvImportModal } from './CsvImportModal'
+import { ContactHistoryDrawer } from './ContactHistoryDrawer'
 import {
   Search,
   Plus,
   Upload,
+  Download,
   UserCheck,
   UserX,
   AlertCircle,
   ShieldAlert,
   Edit2,
   Lock,
+  History,
 } from 'lucide-react'
 
 interface ContactListProps {
   contacts: Contact[]
+  campaigns?: Campaign[]
   userRole: UserRole
 }
 
-export function ContactList({ contacts, userRole }: ContactListProps) {
+export function ContactList({ contacts, campaigns = [], userRole }: ContactListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isCsvOpen, setIsCsvOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [historyContact, setHistoryContact] = useState<Contact | null>(null)
   const [rbacAlert, setRbacAlert] = useState<string | null>(null)
+
+  const handleExportCsv = () => {
+    const headers = 'email,first_name,last_name,organization,job_role,audience_tag,status'
+    const rows = filteredContacts.map(
+      (c) =>
+        `"${c.email}","${c.first_name || ''}","${c.last_name || ''}","${c.organization || ''}","${c.job_role || ''}","${c.audience_tag || ''}","${c.status}"`
+    )
+    const content = [headers, ...rows].join('\n')
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tmas_reach_contacts_${Date.now()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const canSuppress = hasPermission(userRole, 'contacts:suppress')
 
@@ -179,6 +200,15 @@ export function ContactList({ contacts, userRole }: ContactListProps) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={handleExportCsv}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            title="Export filtered contacts to CSV"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </button>
+          <button
+            type="button"
             onClick={() => setIsCsvOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
@@ -248,6 +278,14 @@ export function ContactList({ contacts, userRole }: ContactListProps) {
                     <div className="inline-flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => setHistoryContact(contact)}
+                        className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="View Outreach History"
+                      >
+                        <History className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           setEditingContact(contact)
                           setIsFormOpen(true)
@@ -302,6 +340,19 @@ export function ContactList({ contacts, userRole }: ContactListProps) {
           existingContacts={contacts}
           onClose={() => setIsCsvOpen(false)}
           onImported={() => setIsCsvOpen(false)}
+        />
+      )}
+
+      {historyContact && (
+        <ContactHistoryDrawer
+          contact={historyContact}
+          campaigns={campaigns}
+          userRole={userRole}
+          onClose={() => setHistoryContact(null)}
+          onStatusChanged={() => {
+            const updated = store.getContacts().find((c) => c.id === historyContact.id)
+            setHistoryContact(updated || null)
+          }}
         />
       )}
     </div>
