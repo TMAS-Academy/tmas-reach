@@ -39,16 +39,28 @@ export function Navbar({
 }: NavbarProps) {
   const isAdmin = currentUser.role === 'administrator'
   const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('tmas_theme') === 'dark'
+    try {
+      return (
+        localStorage.getItem('tmas_theme') === 'dark' ||
+        (!localStorage.getItem('tmas_theme') &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+      )
+    } catch {
+      return false
+    }
   })
 
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('tmas_theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('tmas_theme', 'light')
+    try {
+      if (isDark) {
+        document.documentElement.classList.add('dark')
+        localStorage.setItem('tmas_theme', 'dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+        localStorage.setItem('tmas_theme', 'light')
+      }
+    } catch {
+      // Storage unavailable
     }
   }, [isDark])
 
@@ -96,10 +108,21 @@ export function Navbar({
           <button
             type="button"
             onClick={() => setIsDark((d) => !d)}
-            className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? (
+              <>
+                <Sun className="h-4 w-4 text-amber-400" />
+                <span className="hidden sm:inline">Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon className="h-4 w-4 text-indigo-500" />
+                <span className="hidden sm:inline">Dark Mode</span>
+              </>
+            )}
           </button>
 
           <button
