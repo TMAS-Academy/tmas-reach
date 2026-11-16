@@ -40,6 +40,9 @@ export function Navbar({
   const isAdmin = currentUser.role === 'administrator'
   const [isDark, setIsDark] = useState(() => {
     try {
+      const urlTheme = new URLSearchParams(window.location.search).get('theme')
+      if (urlTheme === 'dark') return true
+      if (urlTheme === 'light') return false
       return (
         localStorage.getItem('tmas_theme') === 'dark' ||
         (!localStorage.getItem('tmas_theme') &&

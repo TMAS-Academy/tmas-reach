@@ -7,10 +7,13 @@
     <title>TMAS Reach</title>
     <script>
       try {
+        const themeParam = new URLSearchParams(window.location.search).get('theme')
         if (
-          localStorage.getItem('tmas_theme') === 'dark' ||
-          (!localStorage.getItem('tmas_theme') &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches)
+          themeParam === 'dark' ||
+          (!themeParam &&
+            (localStorage.getItem('tmas_theme') === 'dark' ||
+              (!localStorage.getItem('tmas_theme') &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches)))
         ) {
           document.documentElement.classList.add('dark')
         } else {
