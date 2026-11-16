@@ -1,122 +1,107 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useState, useEffect } from 'react'
+import { store } from './lib/store'
+import type { UserRole } from './types'
+import { Navbar, type TabKey } from './components/layout/Navbar'
+import { ContactList } from './components/contacts/ContactList'
+import { TemplateList } from './components/templates/TemplateList'
+import { CampaignList } from './components/campaigns/CampaignList'
+import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard'
+import { ActivityLogs } from './components/analytics/ActivityLogs'
+import { UserManagement } from './components/admin/UserManagement'
+import { UnsubscribePortal } from './components/unsubscribe/UnsubscribePortal'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [, setTick] = useState(0)
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab') as TabKey | null
+    return tabParam || 'contacts'
+  })
+
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      setTick((t) => t + 1)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const currentUser = store.getCurrentUser()
+  const contacts = store.getContacts()
+  const templates = store.getTemplates()
+  const campaigns = store.getCampaigns()
+  const logs = store.getLogs()
+  const users = store.getUsers()
+
+  const handleRoleChange = (role: UserRole) => {
+    store.setCurrentRole(role)
+    if (role !== 'administrator' && activeTab === 'admin') {
+      setActiveTab('contacts')
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
+      <Navbar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        currentUser={currentUser}
+        onRoleChange={handleRoleChange}
+      />
 
-      <div className="ticks"></div>
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
+        {activeTab === 'contacts' && (
+          <ContactList contacts={contacts} userRole={currentUser.role} />
+        )}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {activeTab === 'templates' && <TemplateList templates={templates} />}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {activeTab === 'campaigns' && (
+          <CampaignList
+            campaigns={campaigns}
+            templates={templates}
+            contacts={contacts}
+            userRole={currentUser.role}
+          />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnalyticsDashboard
+            contacts={contacts}
+            campaigns={campaigns}
+            userRole={currentUser.role}
+          />
+        )}
+
+        {activeTab === 'logs' && <ActivityLogs logs={logs} />}
+
+        {activeTab === 'admin' && currentUser.role === 'administrator' && (
+          <UserManagement users={users} />
+        )}
+
+        {activeTab === 'unsubscribe' && (
+          <UnsubscribePortal
+            contacts={contacts}
+            onBack={() => setActiveTab('contacts')}
+          />
+        )}
+      </main>
+
+      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>TMAS Reach — Internal Outreach Platform for TMAS Academy</span>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => store.resetToDefault()}
+              className="hover:underline text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              Reset Demo Seed Data
+            </button>
+            <span>PostgreSQL / Supabase Schema Aligned</span>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }
-
-export default App

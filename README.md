@@ -29,15 +29,20 @@ The application architecture and technology stack will be finalized during initi
 
 ```text
 tmas-reach/
+├── AGENTS.md
 ├── README.md
 ├── .gitignore
 ├── .env.example
+├── apps/
+│   └── web/              # React + TypeScript frontend (Vite)
 ├── docs/
-│   └── project-scope.md
-└── src/
+│   ├── project-scope.md
+│   ├── architecture.md
+│   ├── api-and-permissions.md
+│   ├── csv-and-templates.md
+│   └── schema.sql
+└── ...
 ```
-
-This structure will evolve as the frontend, backend, and supporting services are implemented.
 
 ## Responsible Outreach
 

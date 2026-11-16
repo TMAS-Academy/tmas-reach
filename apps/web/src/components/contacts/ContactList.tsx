@@ -1,0 +1,309 @@
+import { useState, useMemo } from 'react'
+import type { Contact, ContactStatus, UserRole } from '../../types'
+import { hasPermission } from '../../lib/rbac'
+import { store } from '../../lib/store'
+import { ContactFormModal } from './ContactFormModal'
+import { CsvImportModal } from './CsvImportModal'
+import {
+  Search,
+  Plus,
+  Upload,
+  UserCheck,
+  UserX,
+  AlertCircle,
+  ShieldAlert,
+  Edit2,
+  Lock,
+} from 'lucide-react'
+
+interface ContactListProps {
+  contacts: Contact[]
+  userRole: UserRole
+}
+
+export function ContactList({ contacts, userRole }: ContactListProps) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isCsvOpen, setIsCsvOpen] = useState(false)
+  const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [rbacAlert, setRbacAlert] = useState<string | null>(null)
+
+  const canSuppress = hasPermission(userRole, 'contacts:suppress')
+
+  const uniqueTags = useMemo(() => {
+    const tags = new Set<string>()
+    contacts.forEach((c) => {
+      if (c.audience_tag) tags.add(c.audience_tag)
+    })
+    return Array.from(tags)
+  }, [contacts])
+
+  const stats = useMemo(() => {
+    return {
+      total: contacts.length,
+      active: contacts.filter((c) => c.status === 'active').length,
+      unsubscribed: contacts.filter((c) => c.status === 'unsubscribed').length,
+      bounced: contacts.filter((c) => c.status === 'bounced').length,
+      suppressed: contacts.filter((c) => c.status === 'suppressed').length,
+    }
+  }, [contacts])
+
+  const filteredContacts = useMemo(() => {
+    return contacts.filter((c) => {
+      const query = searchTerm.toLowerCase()
+      const matchesSearch =
+        !query ||
+        c.email.toLowerCase().includes(query) ||
+        `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(query) ||
+        (c.organization && c.organization.toLowerCase().includes(query)) ||
+        (c.job_role && c.job_role.toLowerCase().includes(query))
+
+      const matchesTag = selectedTag === 'all' || c.audience_tag === selectedTag
+      const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus
+
+      return matchesSearch && matchesTag && matchesStatus
+    })
+  }, [contacts, searchTerm, selectedTag, selectedStatus])
+
+  const handleStatusChange = (contact: Contact, newStatus: ContactStatus) => {
+    if (newStatus === 'suppressed' && !canSuppress) {
+      setRbacAlert('Manual suppression requires Marketing Lead or Administrator permission.')
+      setTimeout(() => setRbacAlert(null), 4000)
+      return
+    }
+    store.setContactStatus(contact.id, newStatus)
+  }
+
+  const renderStatusBadge = (status: ContactStatus) => {
+    switch (status) {
+      case 'active':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+            <UserCheck className="h-3 w-3" /> Active
+          </span>
+        )
+      case 'unsubscribed':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+            <UserX className="h-3 w-3" /> Unsubscribed
+          </span>
+        )
+      case 'bounced':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">
+            <AlertCircle className="h-3 w-3" /> Bounced
+          </span>
+        )
+      case 'suppressed':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-950/50 dark:text-purple-400">
+            <ShieldAlert className="h-3 w-3" /> Suppressed
+          </span>
+        )
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {rbacAlert && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900">
+          <Lock className="h-4 w-4 shrink-0" />
+          <span>{rbacAlert}</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-xs text-slate-500">Total Contacts</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.total}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-xs text-emerald-600 dark:text-emerald-400">Active Outreach</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.active}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-xs text-amber-600 dark:text-amber-400">Unsubscribed</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.unsubscribed}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-xs text-rose-600 dark:text-rose-400">Hard Bounced</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.bounced}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-xs text-purple-600 dark:text-purple-400">Suppressed</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.suppressed}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-1 flex-wrap items-center gap-3">
+          <div className="relative min-w-[240px] flex-1 max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search contacts, organization, role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-4 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+
+          <select
+            value={selectedTag}
+            onChange={(e) => setSelectedTag(e.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+          >
+            <option value="all">All Audience Tags</option>
+            {uniqueTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="unsubscribed">Unsubscribed</option>
+            <option value="bounced">Bounced</option>
+            <option value="suppressed">Suppressed</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCsvOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingContact(null)
+              setIsFormOpen(true)
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-700 shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Add Contact
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Contact</th>
+              <th className="px-4 py-3">Organization & Role</th>
+              <th className="px-4 py-3">Audience Tag</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredContacts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                  No contacts found matching the filters.
+                </td>
+              </tr>
+            ) : (
+              filteredContacts.map((contact) => (
+                <tr key={contact.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-900 dark:text-white">
+                      {contact.first_name || contact.last_name
+                        ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
+                        : '—'}
+                    </div>
+                    <div className="font-mono text-xs text-slate-500">{contact.email}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-slate-800 dark:text-slate-200">
+                      {contact.organization || '—'}
+                    </div>
+                    <div className="text-xs text-slate-500">{contact.job_role || '—'}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {contact.audience_tag ? (
+                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {contact.audience_tag}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{renderStatusBadge(contact.status)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingContact(contact)
+                          setIsFormOpen(true)
+                        }}
+                        className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="Edit Contact"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+
+                      {contact.status === 'active' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(contact, 'suppressed')}
+                          className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                          title={
+                            canSuppress
+                              ? 'Manually Suppress'
+                              : 'Manual suppression requires Lead/Admin permission'
+                          }
+                        >
+                          Suppress
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(contact, 'active')}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                        >
+                          Activate
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {isFormOpen && (
+        <ContactFormModal
+          contact={editingContact}
+          onClose={() => setIsFormOpen(false)}
+          onSaved={() => setIsFormOpen(false)}
+        />
+      )}
+
+      {isCsvOpen && (
+        <CsvImportModal
+          existingContacts={contacts}
+          onClose={() => setIsCsvOpen(false)}
+          onImported={() => setIsCsvOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
