@@ -13,7 +13,11 @@ import './App.css'
 
 export default function App() {
   const [, setTick] = useState(0)
-  const [activeTab, setActiveTab] = useState<TabKey>('contacts')
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab') as TabKey | null
+    return tabParam || 'contacts'
+  })
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
