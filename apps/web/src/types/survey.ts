@@ -26,8 +26,8 @@ export interface SurveySubmission {
   organization: string
   job_role: string
   audience_tag: SurveyAudienceOption
-  grade_levels: string[]
-  programs_of_interest: string[]
+  grade_levels?: string[]
+  programs_of_interest?: string[]
   estimated_students?: number
   notes?: string
   consent_outreach: boolean

@@ -5,6 +5,7 @@ import { store } from '../../lib/store'
 import { ContactFormModal } from './ContactFormModal'
 import { CsvImportModal } from './CsvImportModal'
 import { ContactHistoryDrawer } from './ContactHistoryDrawer'
+import { EducatorSurveyForm } from '../survey/EducatorSurveyForm'
 import {
   Search,
   Plus,
@@ -17,6 +18,7 @@ import {
   Edit2,
   Lock,
   History,
+  School,
 } from 'lucide-react'
 
 interface ContactListProps {
@@ -31,6 +33,7 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isCsvOpen, setIsCsvOpen] = useState(false)
+  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [historyContact, setHistoryContact] = useState<Contact | null>(null)
   const [rbacAlert, setRbacAlert] = useState<string | null>(null)
@@ -249,8 +252,38 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {paginatedContacts.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
-                  No contacts found matching the filters.
+                <td colSpan={5} className="px-6 py-12 text-center">
+                  {contacts.length === 0 ? (
+                    <div className="mx-auto max-w-md space-y-3">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
+                        <School className="h-6 w-6" />
+                      </div>
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                        Zero Placeholder Contacts — Clean Database
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        To maintain sender reputation and CAN-SPAM compliance, collect verified school and educator information via the Educator Outreach Intake Survey or upload a verified CSV.
+                      </p>
+                      <div className="flex items-center justify-center gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsSurveyModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 shadow-xs"
+                        >
+                          <School className="h-3.5 w-3.5" /> Open Intake Survey
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsCsvOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <Upload className="h-3.5 w-3.5" /> Upload CSV
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">No contacts found matching the filters.</span>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -389,6 +422,17 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
           onClose={() => setIsCsvOpen(false)}
           onImported={() => setIsCsvOpen(false)}
         />
+      )}
+
+      {isSurveyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-2xl my-8">
+            <EducatorSurveyForm
+              onSuccess={() => setIsSurveyModalOpen(false)}
+              onCancel={() => setIsSurveyModalOpen(false)}
+            />
+          </div>
+        </div>
       )}
 
       {historyContact && (

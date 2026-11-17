@@ -75,7 +75,7 @@ describe('surveyEngine - CSV serialization', () => {
       notes: 'Interested in math curriculum',
       consent_outreach: true,
       status: 'pending_review',
-      created_at: '2026-11-17T09:00:00Z',
+      submitted_at: '2026-11-17T09:00:00Z',
     },
     {
       id: 'sub_2',
@@ -88,7 +88,7 @@ describe('surveyEngine - CSV serialization', () => {
       grade_levels: ['K-5'],
       consent_outreach: true,
       status: 'pending_review',
-      created_at: '2026-11-17T09:30:00Z',
+      submitted_at: '2026-11-17T09:30:00Z',
     },
   ]
 

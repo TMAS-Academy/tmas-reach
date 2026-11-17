@@ -228,7 +228,7 @@ export function SurveyHub({ surveys, onToast }: SurveyHubProps) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="max-w-xs text-[11px] text-slate-600 dark:text-slate-400 truncate">
-                      {survey.programs_of_interest.join(', ')}
+                      {survey.programs_of_interest?.join(', ') || 'General Outreach'}
                     </div>
                   </td>
                   <td className="px-4 py-3">

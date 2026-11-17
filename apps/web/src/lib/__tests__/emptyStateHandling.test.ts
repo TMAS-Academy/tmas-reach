@@ -24,6 +24,7 @@ describe('emptyStateHandling - safe behavior with zero seed contacts', () => {
       id: 'tmpl_1',
       name: 'High School Math Outreach',
       subject_template: 'Math Olympiad for {{organization}}',
+      body_html: '',
       body_text: 'Hello {{first_name}}, join us at TMAS Academy. Unsubscribe: {{unsubscribe_url}}',
       created_by: 'usr_1',
       created_at: '2026-11-17T00:00:00Z',
