@@ -10,6 +10,7 @@ import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard'
 import { ActivityLogs } from './components/analytics/ActivityLogs'
 import { UserManagement } from './components/admin/UserManagement'
 import { UnsubscribePortal } from './components/unsubscribe/UnsubscribePortal'
+import { SurveyHub } from './components/survey/SurveyHub'
 import './App.css'
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
   const campaigns = store.getCampaigns()
   const logs = store.getLogs()
   const users = store.getUsers()
+  const surveys = store.getSurveys()
 
   const handleRoleChange = (role: UserRole) => {
     store.setCurrentRole(role)
@@ -67,6 +69,10 @@ export default function App() {
             campaigns={campaigns}
             userRole={currentUser.role}
           />
+        )}
+
+        {activeTab === 'intake' && (
+          <SurveyHub surveys={surveys} onToast={addToast} />
         )}
 
         {activeTab === 'templates' && <TemplateList templates={templates} />}

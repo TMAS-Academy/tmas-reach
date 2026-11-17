@@ -13,10 +13,12 @@ import {
   ChevronDown,
   Sun,
   Moon,
+  School,
 } from 'lucide-react'
 
 export type TabKey =
   | 'contacts'
+  | 'intake'
   | 'templates'
   | 'campaigns'
   | 'analytics'
@@ -69,6 +71,7 @@ export function Navbar({
 
   const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
+    { key: 'intake', label: 'Intake Survey', icon: <School className="h-4 w-4" /> },
     { key: 'templates', label: 'Templates', icon: <FileText className="h-4 w-4" /> },
     { key: 'campaigns', label: 'Campaigns', icon: <Send className="h-4 w-4" /> },
     { key: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },

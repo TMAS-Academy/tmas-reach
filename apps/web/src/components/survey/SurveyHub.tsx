@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   Clock,
   Archive,
-  ArrowRight,
   Filter,
   UserCheck,
 } from 'lucide-react'
