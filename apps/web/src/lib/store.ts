@@ -8,6 +8,7 @@ import type {
   User,
   UserRole,
 } from '../types'
+import type { SurveySubmission } from '../types/survey'
 import { validateCampaignPreApproval } from './templateEngine'
 
 const SEED_USERS: User[] = [
@@ -121,6 +122,7 @@ export class AppStore {
   private campaigns: Campaign[]
   private recipients: CampaignRecipient[]
   private logs: ActivityLog[]
+  private surveys: SurveySubmission[]
   private listeners: (() => void)[] = []
 
   constructor() {
@@ -131,6 +133,7 @@ export class AppStore {
     this.campaigns = this.loadOrSeed('tmas_campaigns', SEED_CAMPAIGNS)
     this.recipients = this.loadOrSeed('tmas_recipients', [])
     this.logs = this.loadOrSeed('tmas_logs', SEED_LOGS)
+    this.surveys = this.loadOrSeed('tmas_surveys', [])
   }
 
   private loadOrSeed<T>(key: string, seed: T): T {
@@ -153,6 +156,7 @@ export class AppStore {
       localStorage.setItem('tmas_campaigns', JSON.stringify(this.campaigns))
       localStorage.setItem('tmas_recipients', JSON.stringify(this.recipients))
       localStorage.setItem('tmas_logs', JSON.stringify(this.logs))
+      localStorage.setItem('tmas_surveys', JSON.stringify(this.surveys))
     } catch {
       // Ignore storage errors
     }
@@ -528,6 +532,71 @@ export class AppStore {
     })
   }
 
+  public getSurveys(): SurveySubmission[] {
+    return [...this.surveys].sort(
+      (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+    )
+  }
+
+  public addSurveySubmission(
+    data: Omit<SurveySubmission, 'id' | 'status' | 'submitted_at'>
+  ): SurveySubmission {
+    const submission: SurveySubmission = {
+      ...data,
+      id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      email: data.email.trim().toLowerCase(),
+      first_name: data.first_name.trim(),
+      last_name: data.last_name.trim(),
+      organization: data.organization.trim(),
+      job_role: data.job_role.trim(),
+      status: 'pending_review',
+      submitted_at: new Date().toISOString(),
+    }
+
+    this.surveys.unshift(submission)
+    this.logActivity('survey_submitted', 'survey', submission.id, {
+      organization: submission.organization,
+      email: submission.email,
+    })
+    this.save()
+    return submission
+  }
+
+  public promoteSurveyToContact(submissionId: string): { success: boolean; error?: string } {
+    const submission = this.surveys.find((s) => s.id === submissionId)
+    if (!submission) {
+      return { success: false, error: 'Survey submission not found.' }
+    }
+
+    const res = this.addContact({
+      email: submission.email,
+      first_name: submission.first_name,
+      last_name: submission.last_name,
+      organization: submission.organization,
+      job_role: submission.job_role,
+      audience_tag: submission.audience_tag,
+      status: 'active',
+    })
+
+    if (!res.success) {
+      return res
+    }
+
+    submission.status = 'imported_to_contacts'
+    this.logActivity('survey_promoted_to_contact', 'survey', submissionId, {
+      email: submission.email,
+    })
+    this.save()
+    return { success: true }
+  }
+
+  public archiveSurvey(submissionId: string) {
+    this.surveys = this.surveys.map((s) =>
+      s.id === submissionId ? { ...s, status: 'archived' } : s
+    )
+    this.save()
+  }
+
   public resetToDefault() {
     this.users = SEED_USERS
     this.currentUser = SEED_USERS[0]
@@ -536,6 +605,7 @@ export class AppStore {
     this.campaigns = SEED_CAMPAIGNS
     this.recipients = []
     this.logs = SEED_LOGS
+    this.surveys = []
     this.save()
   }
 }
