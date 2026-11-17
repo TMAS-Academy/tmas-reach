@@ -158,4 +158,108 @@ export function registerContactRoutes(router: Router) {
 
     res.status(200).json(contact)
   })
+
+  // POST /api/contacts/import — bulk CSV ingestion with deduplication and suppression guards
+  router.post('/api/contacts/import', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const { csvContent, updateEmptyFields = false } = req.body || {}
+    if (!csvContent || typeof csvContent !== 'string') {
+      res.status(400).json({ error: 'csvContent string is required.' })
+      return
+    }
+
+    const lines = csvContent
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('#'))
+
+    if (lines.length < 2) {
+      res.status(400).json({ error: 'CSV must contain a header line and at least one data row.' })
+      return
+    }
+
+    const headerParts = lines[0].split(',').map((h) => h.replace(/["'\s]/g, '').toLowerCase())
+    const emailIndex = headerParts.indexOf('email')
+    if (emailIndex === -1) {
+      res.status(400).json({ error: 'CSV is missing required "email" column.' })
+      return
+    }
+
+    const firstNameIdx = headerParts.indexOf('first_name')
+    const lastNameIdx = headerParts.indexOf('last_name')
+    const orgIdx = headerParts.indexOf('organization')
+    const roleIdx = headerParts.indexOf('job_role')
+    const audienceIdx = headerParts.indexOf('audience_tag')
+
+    const createdContacts: ContactRecord[] = []
+    const skippedDuplicates: string[] = []
+    const suppressedBlocked: string[] = []
+    const invalidRows: { line: number; raw: string; error: string }[] = []
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i]
+      const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim())
+      const email = cols[emailIndex]?.toLowerCase()
+
+      if (!email || !email.includes('@')) {
+        invalidRows.push({ line: i + 1, raw: line, error: 'Invalid or missing email address.' })
+        continue
+      }
+
+      // Check if email already suppressed or bounced
+      const existing = contactsDb.find((c) => c.email.toLowerCase() === email)
+      if (existing) {
+        if (existing.status === 'suppressed' || existing.status === 'bounced' || existing.status === 'unsubscribed') {
+          suppressedBlocked.push(email)
+          continue
+        }
+
+        if (updateEmptyFields) {
+          if (firstNameIdx !== -1 && !existing.first_name && cols[firstNameIdx]) existing.first_name = cols[firstNameIdx]
+          if (lastNameIdx !== -1 && !existing.last_name && cols[lastNameIdx]) existing.last_name = cols[lastNameIdx]
+          if (orgIdx !== -1 && !existing.organization && cols[orgIdx]) existing.organization = cols[orgIdx]
+          if (roleIdx !== -1 && !existing.job_role && cols[roleIdx]) existing.job_role = cols[roleIdx]
+          if (audienceIdx !== -1 && !existing.audience_tag && cols[audienceIdx]) existing.audience_tag = cols[audienceIdx]
+          existing.updated_at = new Date().toISOString()
+        }
+
+        skippedDuplicates.push(email)
+        continue
+      }
+
+      const newContact: ContactRecord = {
+        id: `cnt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        email,
+        first_name: firstNameIdx !== -1 ? cols[firstNameIdx] : '',
+        last_name: lastNameIdx !== -1 ? cols[lastNameIdx] : '',
+        organization: orgIdx !== -1 ? cols[orgIdx] : '',
+        job_role: roleIdx !== -1 ? cols[roleIdx] : '',
+        audience_tag: audienceIdx !== -1 ? cols[audienceIdx] : 'educators',
+        status: 'active',
+        unsubscribe_token: `tok_${Math.random().toString(36).substring(2, 12)}`,
+        created_by: user.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      contactsDb.unshift(newContact)
+      createdContacts.push(newContact)
+    }
+
+    res.status(200).json({
+      summary: {
+        totalRows: lines.length - 1,
+        importedCount: createdContacts.length,
+        skippedDuplicatesCount: skippedDuplicates.length,
+        suppressedBlockedCount: suppressedBlocked.length,
+        invalidRowsCount: invalidRows.length,
+      },
+      createdContacts,
+      skippedDuplicates,
+      suppressedBlocked,
+      invalidRows,
+    })
+  })
 }
