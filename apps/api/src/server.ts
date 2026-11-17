@@ -1,6 +1,11 @@
 import http from 'http'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { URL } from 'url'
+import { registerContactRoutes } from './routes/contacts.js'
+import { registerCampaignRoutes } from './routes/campaigns.js'
+import { registerSurveyRoutes } from './routes/surveys.js'
+import { registerUnsubscribeRoutes } from './routes/unsubscribe.js'
+import { registerWebhookRoutes } from './routes/webhooks.js'
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'OPTIONS'
 
@@ -203,6 +208,12 @@ export function buildDefaultRouter(): Router {
       timestamp: new Date().toISOString(),
     })
   })
+
+  registerContactRoutes(router)
+  registerCampaignRoutes(router)
+  registerSurveyRoutes(router)
+  registerUnsubscribeRoutes(router)
+  registerWebhookRoutes(router)
 
   return router
 }
