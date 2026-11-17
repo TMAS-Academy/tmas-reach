@@ -77,11 +77,8 @@ export function CampaignList({ campaigns, templates, contacts, userRole }: Campa
           </div>
           <div>
             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              Outreach Campaigns
+              Campaigns
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Enforces strict approval gate: no emails dispatch without explicit lead or admin sign-off
-            </p>
           </div>
         </div>
 

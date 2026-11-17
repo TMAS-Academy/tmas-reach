@@ -95,11 +95,8 @@ export function AnalyticsDashboard({
           </div>
           <div>
             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              Campaign Reporting & Performance
+              Campaign Analytics
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Audience delivery metrics, bounce tracking, and contact pool health
-            </p>
           </div>
         </div>
 

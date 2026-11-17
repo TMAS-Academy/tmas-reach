@@ -260,10 +260,10 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                       </div>
                       <div className="space-y-1">
                         <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                          Zero Placeholder Contacts — Clean Database
+                          No contacts yet
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
-                          To maintain sender reputation and CAN-SPAM compliance, collect verified school and educator information via the Educator Outreach Intake Survey or upload a verified CSV.
+                          Add contacts manually, import a CSV, or review intake survey responses.
                         </p>
                       </div>
                       <div className="flex items-center justify-center gap-3 pt-2">

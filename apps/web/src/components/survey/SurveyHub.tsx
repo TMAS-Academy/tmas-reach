@@ -102,11 +102,8 @@ export function SurveyHub({ surveys, onToast }: SurveyHubProps) {
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Educator Outreach Intake Hub
+              Educator Outreach Intake
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Collect, verify, and export real school and educator survey data into CSV format for campaign outreach
-            </p>
           </div>
         </div>
 

@@ -21,11 +21,8 @@ export function ActivityLogs({ logs }: ActivityLogsProps) {
         </div>
         <div>
           <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-            System Activity & Audit Logs
+            Activity Log
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Immutable audit trail mandated by Section 6 (Security and Responsible Outreach)
-          </p>
         </div>
       </div>
 

@@ -113,22 +113,19 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>TMAS Reach — Internal Outreach Platform for TMAS Academy</span>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => {
-                store.resetToDefault()
-                addToast('success', 'Reset demo seed data')
-              }}
-              className="hover:underline text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            >
-              Reset Demo Seed Data
-            </button>
-            <span>PostgreSQL / Supabase Schema Aligned</span>
-          </div>
+      <footer className="border-t border-slate-200/80 bg-white/50 py-3 text-xs text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/50">
+        <div className="mx-auto max-w-7xl px-4 flex items-center justify-between">
+          <span>TMAS Academy</span>
+          <button
+            type="button"
+            onClick={() => {
+              store.resetToDefault()
+              addToast('info', 'Demo data reset')
+            }}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
+          >
+            Reset demo data
+          </button>
         </div>
       </footer>
 

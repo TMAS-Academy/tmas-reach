@@ -121,20 +121,9 @@ export function Navbar({
             alt="TMAS Academy"
             className="h-10 w-10 rounded-lg object-contain bg-black shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(250,204,21,0.35)] cursor-pointer"
           />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
-                TMAS Reach
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-500 dark:bg-amber-400/15 dark:text-amber-300 border border-amber-400/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                v1.0 Live
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Outreach & Campaign Management for TMAS Academy
-            </p>
-          </div>
+          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+            TMAS Reach
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -238,14 +227,6 @@ export function Navbar({
               </span>
               )
             </span>
-          </div>
-          <div className="hidden sm:block text-slate-400 dark:text-slate-500">
-            {currentUser.role === 'marketing_intern' &&
-              'Permissions: Import/edit contacts, templates, draft campaigns, submit for review.'}
-            {currentUser.role === 'marketing_lead' &&
-              'Permissions: Full outreach control, campaign approvals, suppression, and dispatch.'}
-            {currentUser.role === 'administrator' &&
-              'Permissions: Full administrative and RBAC management.'}
           </div>
         </div>
       </div>
