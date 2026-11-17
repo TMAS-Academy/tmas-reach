@@ -1,121 +1,94 @@
 # TMAS Reach
 
-**Marketing and Outreach Management Platform for TMAS Academy**
-
-TMAS Reach is an internal web application designed for **TMAS Academy** to streamline and coordinate marketing outreach to schools, school districts, educators, and educational organizations. It centralizes contact management, personalized email templating, multi-stage approval workflows, controlled batch delivery, and delivery analytics in one unified platform.
+Internal tool for TMAS Academy to manage school outreach contacts, email templates, and batch outreach campaigns.
 
 ---
 
-## Current Status
+## Status
 
-**Active Development — Complete Full-Stack Architecture Implemented & Verified**
-
-The application features a decoupled frontend (`apps/web`), a backend API service with RBAC and ESP webhook processing (`apps/api`), an asynchronous batch worker, and an authentic **Educator Outreach Intake Survey System**. The codebase contains 33 passing automated tests across frontend and backend services.
+Active development. 43 passing automated tests across frontend (`apps/web`) and API (`apps/api`).
 
 ---
 
-## Objectives & Implemented Features
+## What It Does
 
-* **Authentic Educator Intake & Survey Hub:** Collect verified school and educator information via the built-in Educator Intake Survey (`/intake` / `POST /api/surveys`) or map external Google Forms data. Fictitious placeholder records have been eliminated to protect domain deliverability and enforce CAN-SPAM compliance.
-* **Contact Management & Suppression Tracking:** Add, edit, search, and categorize contacts by audience tag (`high_school`, `middle_school`, `district_admin`, `educators`, `nonprofit`). Includes manual suppression controls restricted to Leads and Admins.
-* **CSV Import & Deduplication Engine:** Upload or paste contact spreadsheets with automated whitespace normalization, lowercase email syntax validation, duplicate email detection, and strict suppression protection to prevent reactivating opted-out contacts.
-* **Email Template Builder:** Create reusable outreach templates supporting double-curly-brace variable personalization (`{{first_name}}`, `{{last_name}}`, `{{organization}}`, `{{job_role}}`, and mandatory `{{unsubscribe_url}}`) with default fallbacks.
-* **Campaign Workflow & Pre-Approval Gate:** Full campaign lifecycle management (`draft` &rarr; `pending_approval` &rarr; `approved` / `rejected` &rarr; `sending` &rarr; `completed`). Enforces 4 automated pre-approval validation checks before submission.
-* **Backend API & Controlled Batch Scheduler:** Node.js/TypeScript backend API handling contacts CRUD, survey intake, ESP delivery/bounce webhooks with HMAC-SHA256 signature verification, and a batched background scheduler respecting provider rate limits.
-* **Delivery Reporting & Analytics:** Live tracking of delivery rates, hard bounces, unsubscribe rates, and active contact pools, alongside an immutable activity audit trail (`activity_logs`).
-* **Public Unsubscribe Portal:** Recipient-facing `GET /unsubscribe/:token` and `POST /unsubscribe` endpoints for one-click compliance opt-outs.
+- **Contact Management**: Store contacts with school, district, role, email, and audience tags (`high_school`, `middle_school`, `district_admin`, `educators`, `nonprofit`). Filter by school, district, role, tag, or delivery status. Supports single deletion and bulk actions (bulk delete, bulk suppress).
+- **CSV Import**: Import contact spreadsheets. Detects email, name, school, district, role, and audience tag columns. Validates email syntax, skips duplicates, and protects opted-out or bounced contacts from reactivation.
+- **Educator Intake Survey**: In-app form and CSV export for gathering real educator contact information. Submissions can be reviewed and added directly into active contacts.
+- **Email Templates**: Reusable templates using `{{first_name}}`, `{{last_name}}`, `{{school}}`, `{{organization}}`, `{{district}}`, `{{job_role}}`, and `{{unsubscribe_url}}`.
+- **Campaign Review & Approval**: Campaign workflow (`draft` -> `pending_approval` -> `approved` / `rejected` -> `sending` -> `completed`). Requires subject, body, unsubscribe link, and active contacts before submission.
+- **Controlled Batch Sending**: Dispatches recipients in configurable batch sizes. Shows recipient delivery status (`queued`, `delivered`, `bounced`, `suppressed`) with simulated bounce testing.
+- **Analytics**: Tracks sent count, delivery rate, bounce rate, and unsubscribe rate. Includes a breakdown table grouping deliveries by school and district.
+- **Unsubscribe Portal**: Public endpoint (`/unsubscribe/:token`) letting recipients opt out. Opted-out contacts are suppressed from all future campaigns.
+- **Role-Based Access Control**:
+  - `marketing_intern`: Add/edit contacts, templates, draft campaigns, submit for review.
+  - `marketing_lead`: Campaign approvals, manual contact suppression, batch dispatch.
+  - `administrator`: User and role management, full system access.
+- **Theme**: Dark theme by default with light theme toggle.
 
 ---
 
-## Role-Based Access Control (RBAC)
+## Roles & Permissions
 
-The application enforces three distinct user roles per `docs/api-and-permissions.md`:
-
-| Capability | Marketing Intern | Marketing Lead | Administrator |
+| Action | Intern | Lead | Admin |
 | :--- | :---: | :---: | :---: |
-| View & Search Contacts | Yes | Yes | Yes |
-| Create / Edit / Import CSV Contacts | Yes | Yes | Yes |
-| Manually Suppress Contact | No | Yes | Yes |
-| Create / Edit Email Templates | Yes | Yes | Yes |
-| Create / Edit Draft Campaigns | Yes | Yes | Yes |
-| Send Test Email to Self | Yes | Yes | Yes |
-| Submit Campaign for Approval | Yes | Yes | Yes |
-| Approve / Reject Campaigns with Notes | No | Yes | Yes |
-| Trigger Batch Dispatch | No | Yes | Yes |
-| View Analytics & Audit Logs | Read-Only | Full Access | Full Access |
-| Manage Team Users & Roles | No | No | Yes |
+| Search & view contacts | Yes | Yes | Yes |
+| Add / edit / import CSV contacts | Yes | Yes | Yes |
+| Delete contacts (single / bulk) | Yes | Yes | Yes |
+| Manually suppress contacts | No | Yes | Yes |
+| Create / edit templates | Yes | Yes | Yes |
+| Create draft campaigns | Yes | Yes | Yes |
+| Test send to self | Yes | Yes | Yes |
+| Submit campaign for review | Yes | Yes | Yes |
+| Approve / reject campaigns | No | Yes | Yes |
+| Dispatch batches | No | Yes | Yes |
+| View analytics & audit logs | Yes | Yes | Yes |
+| Manage users & roles | No | No | Yes |
 
 ---
 
-## Project Structure
+## Project Layout
 
 ```text
 tmas-reach/
-├── .github/
-│   └── workflows/ci.yml       # GitHub Actions CI (lint, test, build)
 ├── apps/
-│   ├── api/                   # Node.js TypeScript API & Background Worker
+│   ├── api/            # Express backend (RBAC, webhooks, batch worker)
 │   │   ├── src/
-│   │   │   ├── middleware/    # RBAC authentication & authorization guards
-│   │   │   ├── routes/        # Contacts, campaigns, surveys, webhooks, unsubscribe
-│   │   │   ├── services/      # Batch scheduler & simulated ESP client
-│   │   │   ├── server.ts      # HTTP server with CORS and error handling
-│   │   │   └── __tests__/     # Webhook signature & scheduler unit tests
+│   │   │   ├── middleware/
+│   │   │   ├── routes/
+│   │   │   ├── services/
+│   │   │   └── __tests__/
 │   │   ├── package.json
 │   │   └── tsconfig.json
-│   └── web/                   # React + TypeScript frontend (Vite, Tailwind CSS v4)
-│       ├── public/            # Static assets and official TMAS Academy logo
+│   └── web/            # React + TypeScript frontend (Vite, Tailwind CSS)
 │       ├── src/
-│       │   ├── components/    # Modular UI views (contacts, survey hub, campaigns, templates)
-│       │   ├── lib/           # CSV parser, survey engine, template engine, reactive store
-│       │   └── types/         # Strict TypeScript models aligned with PostgreSQL schema
-│       └── vite.config.ts     # Vite and Vitest configuration
-├── db/
-│   ├── migrations/            # Production PostgreSQL schema migrations
-│   └── seeds/                 # Initial system user records and templates
-├── docs/                      # Architectural, API, schema, survey, and CSV specifications
-│   ├── api-and-permissions.md
-│   ├── architecture.md
-│   ├── csv-and-templates.md
-│   ├── project-scope.md
-│   ├── schema.sql
-│   └── survey-intake-spec.md
-├── .env.example               # Template environment variables
-├── AGENTS.md                  # Engineering and Git workflow guidelines
+│       │   ├── components/
+│       │   ├── lib/
+│       │   └── types/
+│       ├── package.json
+│       └── vite.config.ts
+├── db/                 # PostgreSQL migrations and seed data
+├── docs/               # Specifications and schema references
 └── README.md
 ```
 
 ---
 
-## Development Roadmap Progress
+## Running Locally
 
-- [x] **Milestone 1: Architecture & Schema Definition** (`docs/schema.sql`, `docs/architecture.md`, `db/migrations/001_initial_schema.sql`)
-- [x] **Milestone 2: Role-Based Access Control** (Intern, Lead, Admin role switching & permission matrix)
-- [x] **Milestone 3: Contact Management & CSV Import** (Syntax normalization, duplicate deduplication, suppression protection)
-- [x] **Milestone 4: Template Personalization Engine** (Variable interpolation, fallback defaults, live preview)
-- [x] **Milestone 5: Campaign Management & Approval Gate** (Pre-approval verification checklist, test-send to self, lead sign-off)
-- [x] **Milestone 6: Controlled Batch Delivery Simulation** (Recipient snapshots, batched dispatch)
-- [x] **Milestone 7: Reporting, Audit Trail & Unsubscribe** (KPI dashboard, activity logs, recipient unsubscribe portal)
-- [x] **Milestone 8: Automated Testing & CI Verification** (Vitest unit tests, ESLint, GitHub Actions CI)
-- [x] **Milestone 9: Educator Outreach Intake Survey System** (Public school intake form, survey hub, CSV export)
-- [x] **Milestone 10: Backend API Service & Webhooks** (`apps/api` Express router, HMAC webhook checks, batch scheduler worker)
-- [ ] **Milestone 11: Production Database Deployment** (PostgreSQL / Supabase migration hosting)
+### Requirements
+- Node.js 20+
+- npm 10+
 
----
-
-## Getting Started Locally
-
-### Prerequisites
-* **Node.js** v20+ or v22+
-* **npm** v10+
-
-### Frontend Setup (`apps/web`)
+### Frontend (`apps/web`)
 
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
+
+App runs on `http://localhost:5173`.
 
 Run tests and production build:
 
@@ -124,7 +97,7 @@ npm run test
 npm run build
 ```
 
-### Backend API Setup (`apps/api`)
+### Backend API (`apps/api`)
 
 ```bash
 cd apps/api
