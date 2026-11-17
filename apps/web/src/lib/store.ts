@@ -521,6 +521,27 @@ export class AppStore {
     return this.recipients.filter((r) => r.campaign_id === campaignId)
   }
 
+  public simulateRecipientBounce(recipientId: string): { success: boolean } {
+    const rcp = this.recipients.find((r) => r.id === recipientId)
+    if (!rcp) return { success: false }
+
+    rcp.delivery_status = 'bounced'
+    rcp.bounced_at = new Date().toISOString()
+
+    const contact = this.contacts.find((c) => c.id === rcp.contact_id)
+    if (contact) {
+      contact.status = 'bounced'
+      contact.updated_at = new Date().toISOString()
+    }
+
+    this.logActivity('recipient_bounced', 'recipient', recipientId, {
+      contact_id: rcp.contact_id,
+      email: contact?.email,
+    })
+    this.save()
+    return { success: true }
+  }
+
   public unsubscribeContactByToken(token: string): { success: boolean; contact?: Contact } {
     const contact = this.contacts.find((c) => c.unsubscribe_token === token)
     if (!contact) {

@@ -42,6 +42,7 @@ export function CampaignDetailModal({
   const [reviewNotes, setReviewNotes] = useState(campaign.review_notes || '')
   const [actionError, setActionError] = useState<string | null>(null)
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
+  const [recipientFilter, setRecipientFilter] = useState<string>('all')
 
   const canReview = hasPermission(userRole, 'campaigns:review')
   const canDispatch = hasPermission(userRole, 'campaigns:dispatch')
@@ -51,6 +52,18 @@ export function CampaignDetailModal({
   )
   const activeTargetContacts = targetAudienceContacts.filter((c) => c.status === 'active')
   const recipients = store.getRecipientsForCampaign(campaign.id)
+
+  const filteredRecipients = recipients.filter((r) => {
+    if (recipientFilter === 'all') return true
+    return r.delivery_status === recipientFilter
+  })
+
+  const handleSimulateBounce = (rcpId: string) => {
+    store.simulateRecipientBounce(rcpId)
+    setFeedbackMsg('Simulated bounce recorded. Contact suppressed.')
+    setTimeout(() => setFeedbackMsg(null), 4000)
+    onUpdated()
+  }
 
   const validation = template
     ? validateCampaignPreApproval(template, activeTargetContacts.length)
@@ -212,6 +225,88 @@ export function CampaignDetailModal({
                       <div className="text-purple-600">Suppressed</div>
                     </div>
                   </div>
+
+                  <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Recipients
+                        </span>
+                        <select
+                          value={recipientFilter}
+                          onChange={(e) => setRecipientFilter(e.target.value)}
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                        >
+                          <option value="all">All Statuses</option>
+                          <option value="queued">Queued</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="bounced">Bounced</option>
+                          <option value="skipped_suppressed">Suppressed</option>
+                        </select>
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto rounded border border-slate-200 dark:border-slate-800">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800">
+                            <tr>
+                              <th className="p-2">Recipient</th>
+                              <th className="p-2">Status</th>
+                              <th className="p-2 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredRecipients.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="p-3 text-center text-slate-400">
+                                  No recipients match filter.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredRecipients.map((rcp) => {
+                                const contact = contacts.find((c) => c.id === rcp.contact_id)
+                                return (
+                                  <tr key={rcp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                    <td className="p-2">
+                                      <div className="font-medium text-slate-800 dark:text-slate-200">
+                                        {contact?.email || rcp.contact_id}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {contact?.organization || ''}
+                                      </div>
+                                    </td>
+                                    <td className="p-2">
+                                      <span
+                                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                          rcp.delivery_status === 'delivered'
+                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
+                                            : rcp.delivery_status === 'bounced'
+                                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
+                                            : rcp.delivery_status === 'queued'
+                                            ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                            : 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400'
+                                        }`}
+                                      >
+                                        {rcp.delivery_status}
+                                      </span>
+                                    </td>
+                                    <td className="p-2 text-right">
+                                      {rcp.delivery_status === 'delivered' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSimulateBounce(rcp.id)}
+                                          className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
+                                        >
+                                          Simulate Bounce
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                 </div>
               )}
             </div>
