@@ -8,21 +8,22 @@ TMAS Reach is an internal web application designed for **TMAS Academy** to strea
 
 ## Current Status
 
-**Active Development — Core MVP Implemented & Verified**
+**Active Development — Complete Full-Stack Architecture Implemented & Verified**
 
-The core application architecture, role-based access control (RBAC), contact manager, template engine, campaign approval gate, delivery simulator, and analytics dashboard are implemented, tested with Vitest, and verified via GitHub Actions CI.
+The application features a decoupled frontend (`apps/web`), a backend API service with RBAC and ESP webhook processing (`apps/api`), an asynchronous batch worker, and an authentic **Educator Outreach Intake Survey System**. The codebase contains 33 passing automated tests across frontend and backend services.
 
 ---
 
 ## Objectives & Implemented Features
 
-* **Contact Management & Suppression Tracking:** Add, edit, search, and categorize contacts by audience tag (`high_school`, `district_admin`, `educators`, `nonprofit`). Includes manual suppression controls restricted to Leads and Admins.
-* **CSV Import Engine:** Upload or paste contact spreadsheets with automated whitespace normalization, lowercase email syntax validation, duplicate email detection, and strict suppression protection to prevent reactivating opted-out contacts.
+* **Authentic Educator Intake & Survey Hub:** Collect verified school and educator information via the built-in Educator Intake Survey (`/intake` / `POST /api/surveys`) or map external Google Forms data. Fictitious placeholder records have been eliminated to protect domain deliverability and enforce CAN-SPAM compliance.
+* **Contact Management & Suppression Tracking:** Add, edit, search, and categorize contacts by audience tag (`high_school`, `middle_school`, `district_admin`, `educators`, `nonprofit`). Includes manual suppression controls restricted to Leads and Admins.
+* **CSV Import & Deduplication Engine:** Upload or paste contact spreadsheets with automated whitespace normalization, lowercase email syntax validation, duplicate email detection, and strict suppression protection to prevent reactivating opted-out contacts.
 * **Email Template Builder:** Create reusable outreach templates supporting double-curly-brace variable personalization (`{{first_name}}`, `{{last_name}}`, `{{organization}}`, `{{job_role}}`, and mandatory `{{unsubscribe_url}}`) with default fallbacks.
 * **Campaign Workflow & Pre-Approval Gate:** Full campaign lifecycle management (`draft` &rarr; `pending_approval` &rarr; `approved` / `rejected` &rarr; `sending` &rarr; `completed`). Enforces 4 automated pre-approval validation checks before submission.
-* **Controlled Batch Delivery:** Simulates batched sending within provider rate limits and generates recipient snapshots to prevent accidental duplicate sends.
+* **Backend API & Controlled Batch Scheduler:** Node.js/TypeScript backend API handling contacts CRUD, survey intake, ESP delivery/bounce webhooks with HMAC-SHA256 signature verification, and a batched background scheduler respecting provider rate limits.
 * **Delivery Reporting & Analytics:** Live tracking of delivery rates, hard bounces, unsubscribe rates, and active contact pools, alongside an immutable activity audit trail (`activity_logs`).
-* **Public Unsubscribe Portal:** Recipient-facing `GET /unsubscribe/:token` simulation for one-click compliance opt-outs.
+* **Public Unsubscribe Portal:** Recipient-facing `GET /unsubscribe/:token` and `POST /unsubscribe` endpoints for one-click compliance opt-outs.
 
 ---
 
@@ -53,23 +54,32 @@ tmas-reach/
 ├── .github/
 │   └── workflows/ci.yml       # GitHub Actions CI (lint, test, build)
 ├── apps/
+│   ├── api/                   # Node.js TypeScript API & Background Worker
+│   │   ├── src/
+│   │   │   ├── middleware/    # RBAC authentication & authorization guards
+│   │   │   ├── routes/        # Contacts, campaigns, surveys, webhooks, unsubscribe
+│   │   │   ├── services/      # Batch scheduler & simulated ESP client
+│   │   │   ├── server.ts      # HTTP server with CORS and error handling
+│   │   │   └── __tests__/     # Webhook signature & scheduler unit tests
+│   │   ├── package.json
+│   │   └── tsconfig.json
 │   └── web/                   # React + TypeScript frontend (Vite, Tailwind CSS v4)
 │       ├── public/            # Static assets and official TMAS Academy logo
 │       ├── src/
-│       │   ├── assets/        # Bundled images and icons
-│       │   ├── components/    # Modular UI views (contacts, campaigns, templates, analytics)
-│       │   ├── lib/           # CSV parser, template engine, RBAC helper, reactive store
-│       │   └── types/         # TypeScript models aligned with PostgreSQL schema
+│       │   ├── components/    # Modular UI views (contacts, survey hub, campaigns, templates)
+│       │   ├── lib/           # CSV parser, survey engine, template engine, reactive store
+│       │   └── types/         # Strict TypeScript models aligned with PostgreSQL schema
 │       └── vite.config.ts     # Vite and Vitest configuration
 ├── db/
 │   ├── migrations/            # Production PostgreSQL schema migrations
-│   └── seeds/                 # Initial seed dataset with realistic TMAS Academy records
-├── docs/                      # Architectural, API, schema, and CSV specifications
+│   └── seeds/                 # Initial system user records and templates
+├── docs/                      # Architectural, API, schema, survey, and CSV specifications
 │   ├── api-and-permissions.md
 │   ├── architecture.md
 │   ├── csv-and-templates.md
 │   ├── project-scope.md
-│   └── schema.sql
+│   ├── schema.sql
+│   └── survey-intake-spec.md
 ├── .env.example               # Template environment variables
 ├── AGENTS.md                  # Engineering and Git workflow guidelines
 └── README.md
@@ -87,7 +97,9 @@ tmas-reach/
 - [x] **Milestone 6: Controlled Batch Delivery Simulation** (Recipient snapshots, batched dispatch)
 - [x] **Milestone 7: Reporting, Audit Trail & Unsubscribe** (KPI dashboard, activity logs, recipient unsubscribe portal)
 - [x] **Milestone 8: Automated Testing & CI Verification** (Vitest unit tests, ESLint, GitHub Actions CI)
-- [ ] **Milestone 9: Production ESP Integration & Live Webhooks** (Resend / AWS SES webhook signature verification)
+- [x] **Milestone 9: Educator Outreach Intake Survey System** (Public school intake form, survey hub, CSV export)
+- [x] **Milestone 10: Backend API Service & Webhooks** (`apps/api` Express router, HMAC webhook checks, batch scheduler worker)
+- [ ] **Milestone 11: Production Database Deployment** (PostgreSQL / Supabase migration hosting)
 
 ---
 
@@ -97,31 +109,26 @@ tmas-reach/
 * **Node.js** v20+ or v22+
 * **npm** v10+
 
-### Installation & Development
+### Frontend Setup (`apps/web`)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/TMAS-Academy/tmas-reach.git
-cd tmas-reach/apps/web
-
-# 2. Install dependencies
+cd apps/web
 npm install
-
-# 3. Start development server
 npm run dev
+```
 
-# 4. Run automated unit test suite
+Run tests and production build:
+
+```bash
 npm run test
-
-# 5. Run linter and typecheck
-npm run lint
 npm run build
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+### Backend API Setup (`apps/api`)
 
----
-
-## Responsible Outreach & Compliance
-
-TMAS Reach is designed strictly for authorized, legitimate school and educator outreach. The platform enforces unsubscribe link presence before any campaign can be approved, respects suppression lists across all future imports, and maintains an immutable audit log of outreach activities.
+```bash
+cd apps/api
+npm install
+npm test
+npm run build
+```
