@@ -70,43 +70,36 @@ export function Navbar({
   const navItems: {
     key: TabKey
     label: string
-    miniLogo?: string
     icon: React.ReactNode
   }[] = [
     {
       key: 'contacts',
       label: 'Contacts',
-      miniLogo: '/icons/contacts.jpg',
       icon: <Users className="h-4 w-4" />,
     },
     {
       key: 'intake',
       label: 'Intake Survey',
-      miniLogo: '/icons/intake.jpg',
       icon: <School className="h-4 w-4" />,
     },
     {
       key: 'templates',
       label: 'Templates',
-      miniLogo: '/icons/templates.jpg',
       icon: <FileText className="h-4 w-4" />,
     },
     {
       key: 'campaigns',
       label: 'Campaigns',
-      miniLogo: '/icons/campaigns.jpg',
       icon: <Send className="h-4 w-4" />,
     },
     {
       key: 'analytics',
       label: 'Analytics',
-      miniLogo: '/icons/analytics.jpg',
       icon: <BarChart2 className="h-4 w-4" />,
     },
     {
       key: 'logs',
       label: 'Audit Trail',
-      miniLogo: '/icons/audit.jpg',
       icon: <History className="h-4 w-4" />,
     },
   ]
@@ -212,17 +205,15 @@ export function Navbar({
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-200 border border-transparent'
                 }`}
               >
-                {item.miniLogo ? (
-                  <img
-                    src={item.miniLogo}
-                    alt=""
-                    className={`h-5 w-5 rounded-md object-cover transition-transform duration-200 shadow-xs ${
-                      isActive ? 'scale-110 ring-1 ring-amber-400/60' : 'opacity-85 group-hover:scale-105 group-hover:opacity-100'
-                    }`}
-                  />
-                ) : (
-                  item.icon
-                )}
+                <span
+                  className={`transition-colors duration-200 ${
+                    isActive
+                      ? 'text-amber-500 dark:text-amber-300'
+                      : 'text-slate-400 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200'
+                  }`}
+                >
+                  {item.icon}
+                </span>
                 <span>{item.label}</span>
                 {isActive && (
                   <span className="absolute -bottom-1.5 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]" />

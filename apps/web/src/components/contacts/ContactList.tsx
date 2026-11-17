@@ -18,6 +18,7 @@ import {
   Edit2,
   Lock,
   History,
+  School,
 } from 'lucide-react'
 
 interface ContactListProps {
@@ -254,8 +255,8 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                 <td colSpan={5} className="px-6 py-12 text-center">
                   {contacts.length === 0 ? (
                     <div className="mx-auto max-w-md space-y-4 py-8">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-400 shadow-[0_0_25px_rgba(250,204,21,0.2)] animate-subtle-float">
-                        <img src="/icons/contacts.jpg" alt="" className="h-10 w-10 rounded-xl object-cover shadow-xs" />
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-500 dark:text-amber-400 shadow-[0_0_25px_rgba(250,204,21,0.2)] animate-subtle-float">
+                        <School className="h-8 w-8" />
                       </div>
                       <div className="space-y-1">
                         <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
@@ -271,7 +272,7 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                           onClick={() => setIsSurveyModalOpen(true)}
                           className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 shadow-sm shadow-amber-400/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                         >
-                          <img src="/icons/intake.jpg" alt="" className="h-4 w-4 rounded-xs object-cover" />
+                          <School className="h-4 w-4" />
                           <span>Open Intake Survey</span>
                         </button>
                         <button

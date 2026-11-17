@@ -72,11 +72,9 @@ export function CampaignList({ campaigns, templates, contacts, userRole }: Campa
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <img
-            src="/icons/campaigns.jpg"
-            alt=""
-            className="h-11 w-11 rounded-xl object-cover shadow-sm ring-1 ring-amber-400/30 animate-subtle-float"
-          />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/15 text-amber-500 dark:text-amber-400 border border-amber-400/30 shadow-xs shadow-amber-400/10 animate-subtle-float">
+            <Send className="h-6 w-6" />
+          </div>
           <div>
             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
               Outreach Campaigns
