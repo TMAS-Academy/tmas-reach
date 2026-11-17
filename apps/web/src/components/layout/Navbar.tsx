@@ -45,13 +45,11 @@ export function Navbar({
       const urlTheme = new URLSearchParams(window.location.search).get('theme')
       if (urlTheme === 'dark') return true
       if (urlTheme === 'light') return false
-      return (
-        localStorage.getItem('tmas_theme') === 'dark' ||
-        (!localStorage.getItem('tmas_theme') &&
-          window.matchMedia('(prefers-color-scheme: dark)').matches)
-      )
+      const stored = localStorage.getItem('tmas_theme')
+      if (stored === 'light') return false
+      return true
     } catch {
-      return false
+      return true
     }
   })
 
