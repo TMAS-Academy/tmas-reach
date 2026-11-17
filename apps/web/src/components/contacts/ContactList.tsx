@@ -19,6 +19,7 @@ import {
   Lock,
   History,
   School,
+  Trash2,
 } from 'lucide-react'
 
 interface ContactListProps {
@@ -42,6 +43,53 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
   const [rbacAlert, setRbacAlert] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const PAGE_SIZE = 10
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set())
+
+  const toggleSelectContact = (id: string) => {
+    setSelectedContactIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedContactIds.size === paginatedContacts.length && paginatedContacts.length > 0) {
+      setSelectedContactIds(new Set())
+    } else {
+      setSelectedContactIds(new Set(paginatedContacts.map((c) => c.id)))
+    }
+  }
+
+  const handleDeleteSingle = (contact: Contact) => {
+    if (window.confirm(`Delete ${contact.email}?`)) {
+      store.deleteContact(contact.id)
+      setSelectedContactIds((prev) => {
+        const next = new Set(prev)
+        next.delete(contact.id)
+        return next
+      })
+    }
+  }
+
+  const handleDeleteSelected = () => {
+    if (selectedContactIds.size === 0) return
+    if (window.confirm(`Delete ${selectedContactIds.size} selected contact(s)?`)) {
+      store.deleteContacts(Array.from(selectedContactIds))
+      setSelectedContactIds(new Set())
+    }
+  }
+
+  const handleBulkSuppress = () => {
+    if (!canSuppress) {
+      setRbacAlert('Manual suppression requires Marketing Lead or Administrator permission.')
+      setTimeout(() => setRbacAlert(null), 4000)
+      return
+    }
+    selectedContactIds.forEach((id) => store.setContactStatus(id, 'suppressed'))
+    setSelectedContactIds(new Set())
+  }
 
   const handleExportCsv = () => {
     const headers = 'email,first_name,last_name,organization,district,job_role,audience_tag,status'
@@ -321,10 +369,51 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
         </div>
       </div>
 
+      {selectedContactIds.size > 0 && (
+        <div className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2 border border-amber-200 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200">
+          <span>{selectedContactIds.size} contact(s) selected</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBulkSuppress}
+              className="rounded bg-white px-2.5 py-1 font-medium text-slate-700 shadow-xs border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+            >
+              Suppress Selected
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              className="rounded bg-rose-600 px-2.5 py-1 font-medium text-white hover:bg-rose-700"
+            >
+              Delete Selected
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedContactIds(new Set())}
+              className="text-slate-500 hover:underline dark:text-slate-400"
+            >
+              Deselect
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={
+                    paginatedContacts.length > 0 &&
+                    paginatedContacts.every((c) => selectedContactIds.has(c.id))
+                  }
+                  onChange={toggleSelectAll}
+                  className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                  title="Select all on this page"
+                />
+              </th>
               <th className="px-4 py-3">Contact</th>
               <th className="px-4 py-3">Organization & Role</th>
               <th className="px-4 py-3">Audience Tag</th>
@@ -335,7 +424,7 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {paginatedContacts.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   {contacts.length === 0 ? (
                     <div className="mx-auto max-w-md space-y-4 py-8">
                       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-500 dark:text-amber-400 shadow-[0_0_25px_rgba(250,204,21,0.2)] animate-subtle-float">
@@ -376,6 +465,14 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
             ) : (
               paginatedContacts.map((contact) => (
                 <tr key={contact.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <td className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedContactIds.has(contact.id)}
+                      onChange={() => toggleSelectContact(contact.id)}
+                      className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900 dark:text-white">
                       {contact.first_name || contact.last_name
@@ -425,6 +522,14 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                         title="Edit Contact"
                       >
                         <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSingle(contact)}
+                        className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-rose-400"
+                        title="Delete Contact"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
 
                       {contact.status === 'active' ? (

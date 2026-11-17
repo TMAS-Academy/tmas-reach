@@ -182,13 +182,6 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
               </select>
             </div>
           </div>
-              <option value="high_school">high_school</option>
-              <option value="district_admin">district_admin</option>
-              <option value="educators">educators</option>
-              <option value="nonprofit">nonprofit</option>
-              <option value="general">general</option>
-            </select>
-          </div>
 
           <div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
             <button

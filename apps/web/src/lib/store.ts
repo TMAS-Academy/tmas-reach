@@ -258,6 +258,30 @@ export class AppStore {
     this.save()
   }
 
+  public deleteContact(id: string): { success: boolean } {
+    const contact = this.contacts.find((c) => c.id === id)
+    if (!contact) return { success: false }
+
+    this.contacts = this.contacts.filter((c) => c.id !== id)
+    this.recipients = this.recipients.filter((r) => r.contact_id !== id)
+    this.logActivity('contact_deleted', 'contact', id, { email: contact.email })
+    this.save()
+    return { success: true }
+  }
+
+  public deleteContacts(ids: string[]): { count: number } {
+    const idSet = new Set(ids)
+    const initialCount = this.contacts.length
+    this.contacts = this.contacts.filter((c) => !idSet.has(c.id))
+    this.recipients = this.recipients.filter((r) => !idSet.has(r.contact_id))
+    const deletedCount = initialCount - this.contacts.length
+    if (deletedCount > 0) {
+      this.logActivity('contacts_bulk_deleted', 'contact', undefined, { count: deletedCount })
+      this.save()
+    }
+    return { count: deletedCount }
+  }
+
   public importContacts(rows: Partial<Contact>[], allowEmptyUpdate = false): number {
     let importedCount = 0
     const now = new Date().toISOString()
