@@ -24,11 +24,11 @@ interface CampaignDetailModalProps {
   onUpdated: () => void
 }
 
-const SAMPLE_PREVIEW_CONTACT = {
-  first_name: 'Maria',
-  last_name: 'Vasquez',
-  organization: 'Lincoln High School',
-  job_role: 'Math Department Chair',
+const DEFAULT_PREVIEW_SAMPLE = {
+  first_name: 'Educator',
+  last_name: '',
+  organization: 'School / District',
+  job_role: 'Educator',
 }
 
 export function CampaignDetailModal({
@@ -99,12 +99,14 @@ export function CampaignDetailModal({
     onUpdated()
   }
 
+  const previewContact = activeTargetContacts[0] || DEFAULT_PREVIEW_SAMPLE
+
   const renderedSubject = template
-    ? renderTemplateString(template.subject_template, { contact: SAMPLE_PREVIEW_CONTACT })
+    ? renderTemplateString(template.subject_template, { contact: previewContact })
     : ''
   const renderedBody = template
     ? renderTemplateString(template.body_html || template.body_text, {
-        contact: SAMPLE_PREVIEW_CONTACT,
+        contact: previewContact,
         unsubscribeUrl: 'https://reach.tmasacademy.org/unsubscribe/sample-token',
       })
     : ''

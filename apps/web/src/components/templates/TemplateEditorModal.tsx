@@ -11,11 +11,11 @@ interface TemplateEditorModalProps {
 }
 
 const SAMPLE_CONTACT = {
-  first_name: 'Maria',
-  last_name: 'Vasquez',
-  organization: 'Lincoln High School',
-  job_role: 'Math Department Chair',
-  audience_tag: 'high_school',
+  first_name: 'Educator',
+  last_name: '',
+  organization: 'School / District',
+  job_role: 'Department Head',
+  audience_tag: 'educators',
 }
 
 const VARIABLES = [

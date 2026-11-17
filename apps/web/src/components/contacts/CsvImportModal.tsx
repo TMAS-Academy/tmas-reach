@@ -11,11 +11,9 @@ interface CsvImportModalProps {
 }
 
 const SAMPLE_CSV = `email,first_name,last_name,organization,job_role,audience_tag
-j.smith@springfield.k12.org,John,Smith,Springfield High School,Science Department Chair,high_school
-k.patel@metrovalley.edu,Kavita,Patel,Metro Valley District,Curriculum Specialist,district_admin
-b.thompson@westlakeacad.org,Brian,Thompson,Westlake Academy,Science Teacher,educators
-invalid-email-address,No,Email,Unknown School,Teacher,educators
-a.garcia@centralstem.org,Alex,Garcia,Central STEM Academy,Assistant Principal,high_school`
+math.lead@school.edu,Firstname,Lastname,Regional High School,Math Department Chair,high_school
+director@stemdistrict.k12.org,Firstname,Lastname,County School District,STEM Coordinator,district_admin
+faculty@academy.org,Firstname,Lastname,Community Prep Academy,Science Educator,educators`
 
 export function CsvImportModal({ existingContacts, onClose, onImported }: CsvImportModalProps) {
   const [csvText, setCsvText] = useState('')
