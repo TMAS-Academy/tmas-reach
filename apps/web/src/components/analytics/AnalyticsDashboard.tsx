@@ -11,6 +11,7 @@ import {
   Send,
   Download,
   Users,
+  School,
 } from 'lucide-react'
 
 interface AnalyticsDashboardProps {
@@ -65,6 +66,40 @@ export function AnalyticsDashboard({
       deliveryRate,
       bounceRate,
     }
+  }, [contacts, campaigns])
+
+  const schoolBreakdown = useMemo(() => {
+    const map = new Map<
+      string,
+      { school: string; district: string; contacts: number; delivered: number; bounced: number }
+    >()
+
+    contacts.forEach((c) => {
+      const school = c.organization?.trim() || 'Unassigned School'
+      const district = c.district?.trim() || '—'
+      const key = `${school}:::${district}`
+      if (!map.has(key)) {
+        map.set(key, { school, district, contacts: 0, delivered: 0, bounced: 0 })
+      }
+      map.get(key)!.contacts++
+    })
+
+    campaigns.forEach((c) => {
+      const recs = store.getRecipientsForCampaign(c.id)
+      recs.forEach((r) => {
+        const contact = contacts.find((cnt) => cnt.id === r.contact_id)
+        if (!contact) return
+        const school = contact.organization?.trim() || 'Unassigned School'
+        const district = contact.district?.trim() || '—'
+        const key = `${school}:::${district}`
+        if (map.has(key)) {
+          if (r.delivery_status === 'delivered') map.get(key)!.delivered++
+          if (r.delivery_status === 'bounced') map.get(key)!.bounced++
+        }
+      })
+    })
+
+    return Array.from(map.values()).sort((a, b) => b.contacts - a.contacts)
   }, [contacts, campaigns])
 
   const handleExport = () => {
@@ -275,6 +310,56 @@ export function AnalyticsDashboard({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+          <School className="h-4 w-4 text-amber-500" />
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Outreach by School & District
+          </h4>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800">
+              <tr>
+                <th className="p-2.5">School / Organization</th>
+                <th className="p-2.5">District</th>
+                <th className="p-2.5 text-right">Contacts</th>
+                <th className="p-2.5 text-right">Delivered</th>
+                <th className="p-2.5 text-right">Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {schoolBreakdown.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-4 text-center text-slate-400">
+                    No school or district data available yet.
+                  </td>
+                </tr>
+              ) : (
+                schoolBreakdown.map((row, idx) => {
+                  const rate =
+                    row.delivered + row.bounced > 0
+                      ? `${Math.round((row.delivered / (row.delivered + row.bounced)) * 100)}%`
+                      : '—'
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="p-2.5 font-medium text-slate-800 dark:text-slate-200">
+                        {row.school}
+                      </td>
+                      <td className="p-2.5 text-slate-500 dark:text-slate-400">{row.district}</td>
+                      <td className="p-2.5 text-right font-semibold">{row.contacts}</td>
+                      <td className="p-2.5 text-right text-emerald-600 font-semibold">{row.delivered}</td>
+                      <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{rate}</td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
