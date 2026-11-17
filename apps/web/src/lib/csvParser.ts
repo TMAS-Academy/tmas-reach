@@ -5,6 +5,7 @@ export interface ParsedContactRow {
   first_name?: string
   last_name?: string
   organization?: string
+  district?: string
   job_role?: string
   audience_tag?: string
 }
@@ -63,7 +64,10 @@ export function parseCsvContent(
   const firstNameIdx = headers.findIndex((h) => h === 'firstname' || h === 'first')
   const lastNameIdx = headers.findIndex((h) => h === 'lastname' || h === 'last')
   const orgIdx = headers.findIndex(
-    (h) => h === 'organization' || h === 'org' || h === 'school' || h === 'district'
+    (h) => h === 'organization' || h === 'org' || h === 'school' || h === 'schoolname' || h === 'campus'
+  )
+  const districtIdx = headers.findIndex(
+    (h) => h === 'district' || h === 'schooldistrict' || h === 'isd' || h === 'county'
   )
   const roleIdx = headers.findIndex((h) => h === 'jobrole' || h === 'role' || h === 'title')
   const audienceIdx = headers.findIndex(
@@ -117,6 +121,7 @@ export function parseCsvContent(
       first_name: firstNameIdx !== -1 ? cols[firstNameIdx]?.trim() || undefined : undefined,
       last_name: lastNameIdx !== -1 ? cols[lastNameIdx]?.trim() || undefined : undefined,
       organization: orgIdx !== -1 ? cols[orgIdx]?.trim() || undefined : undefined,
+      district: districtIdx !== -1 ? cols[districtIdx]?.trim() || undefined : undefined,
       job_role: roleIdx !== -1 ? cols[roleIdx]?.trim() || undefined : undefined,
       audience_tag: audienceIdx !== -1 ? cols[audienceIdx]?.trim() || undefined : undefined,
     }

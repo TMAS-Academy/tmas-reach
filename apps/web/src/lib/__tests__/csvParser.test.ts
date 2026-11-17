@@ -70,4 +70,13 @@ describe('CSV Parser and Import Validator', () => {
     expect(res.suppressedExistingEmails).toContain('optout@school.edu')
     expect(res.suppressedExistingEmails).toContain('bounced@school.edu')
   })
+
+  it('parses distinct district and school columns', () => {
+    const csv = 'email,school,district,role\nteacher@domain.org,West High,County ISD,Math Coach'
+    const res = parseCsvContent(csv, existingContacts)
+    expect(res.validRows.length).toBe(1)
+    expect(res.validRows[0].organization).toBe('West High')
+    expect(res.validRows[0].district).toBe('County ISD')
+    expect(res.validRows[0].job_role).toBe('Math Coach')
+  })
 })

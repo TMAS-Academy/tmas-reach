@@ -274,6 +274,7 @@ export class AppStore {
             'first_name',
             'last_name',
             'organization',
+            'district',
             'job_role',
             'audience_tag',
           ]
@@ -295,6 +296,7 @@ export class AppStore {
           first_name: row.first_name,
           last_name: row.last_name,
           organization: row.organization,
+          district: row.district,
           job_role: row.job_role,
           audience_tag: row.audience_tag,
           status: 'active',

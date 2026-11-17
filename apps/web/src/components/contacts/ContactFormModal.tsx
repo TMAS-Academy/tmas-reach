@@ -14,6 +14,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
   const [firstName, setFirstName] = useState(contact?.first_name || '')
   const [lastName, setLastName] = useState(contact?.last_name || '')
   const [organization, setOrganization] = useState(contact?.organization || '')
+  const [district, setDistrict] = useState(contact?.district || '')
   const [jobRole, setJobRole] = useState(contact?.job_role || '')
   const [audienceTag, setAudienceTag] = useState(contact?.audience_tag || 'high_school')
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +34,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         first_name: firstName.trim() || undefined,
         last_name: lastName.trim() || undefined,
         organization: organization.trim() || undefined,
+        district: district.trim() || undefined,
         job_role: jobRole.trim() || undefined,
         audience_tag: audienceTag.trim() || undefined,
       })
@@ -46,6 +48,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         first_name: firstName.trim() || undefined,
         last_name: lastName.trim() || undefined,
         organization: organization.trim() || undefined,
+        district: district.trim() || undefined,
         job_role: jobRole.trim() || undefined,
         audience_tag: audienceTag.trim() || undefined,
         status: 'active',
@@ -137,6 +140,21 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                School District
+              </label>
+              <input
+                type="text"
+                value={district}
+                onChange={(e) => setDistrict(e.target.value)}
+                placeholder="Central Unified District"
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                 Job Role
               </label>
               <input
@@ -147,17 +165,23 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
                 className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
               />
             </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                Audience Tag
+              </label>
+              <select
+                value={audienceTag}
+                onChange={(e) => setAudienceTag(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+              >
+                <option value="high_school">High School</option>
+                <option value="middle_school">Middle School</option>
+                <option value="district_admin">District Admin</option>
+                <option value="educators">Educators</option>
+                <option value="nonprofit">Nonprofit / Other</option>
+              </select>
+            </div>
           </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-              Audience Tag
-            </label>
-            <select
-              value={audienceTag}
-              onChange={(e) => setAudienceTag(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-            >
               <option value="high_school">high_school</option>
               <option value="district_admin">district_admin</option>
               <option value="educators">educators</option>

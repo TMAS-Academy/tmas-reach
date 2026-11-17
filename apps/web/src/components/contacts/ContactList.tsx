@@ -31,6 +31,9 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedSchool, setSelectedSchool] = useState<string>('all')
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('all')
+  const [selectedRole, setSelectedRole] = useState<string>('all')
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isCsvOpen, setIsCsvOpen] = useState(false)
   const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false)
@@ -41,10 +44,10 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
   const PAGE_SIZE = 10
 
   const handleExportCsv = () => {
-    const headers = 'email,first_name,last_name,organization,job_role,audience_tag,status'
+    const headers = 'email,first_name,last_name,organization,district,job_role,audience_tag,status'
     const rows = filteredContacts.map(
       (c) =>
-        `"${c.email}","${c.first_name || ''}","${c.last_name || ''}","${c.organization || ''}","${c.job_role || ''}","${c.audience_tag || ''}","${c.status}"`
+        `"${c.email}","${c.first_name || ''}","${c.last_name || ''}","${c.organization || ''}","${c.district || ''}","${c.job_role || ''}","${c.audience_tag || ''}","${c.status}"`
     )
     const content = [headers, ...rows].join('\n')
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
@@ -63,7 +66,31 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
     contacts.forEach((c) => {
       if (c.audience_tag) tags.add(c.audience_tag)
     })
-    return Array.from(tags)
+    return Array.from(tags).sort()
+  }, [contacts])
+
+  const uniqueSchools = useMemo(() => {
+    const schools = new Set<string>()
+    contacts.forEach((c) => {
+      if (c.organization?.trim()) schools.add(c.organization.trim())
+    })
+    return Array.from(schools).sort()
+  }, [contacts])
+
+  const uniqueDistricts = useMemo(() => {
+    const districts = new Set<string>()
+    contacts.forEach((c) => {
+      if (c.district?.trim()) districts.add(c.district.trim())
+    })
+    return Array.from(districts).sort()
+  }, [contacts])
+
+  const uniqueRoles = useMemo(() => {
+    const roles = new Set<string>()
+    contacts.forEach((c) => {
+      if (c.job_role?.trim()) roles.add(c.job_role.trim())
+    })
+    return Array.from(roles).sort()
   }, [contacts])
 
   const stats = useMemo(() => {
@@ -83,12 +110,23 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
       c.email.toLowerCase().includes(query) ||
       `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(query) ||
       (c.organization && c.organization.toLowerCase().includes(query)) ||
+      (c.district && c.district.toLowerCase().includes(query)) ||
       (c.job_role && c.job_role.toLowerCase().includes(query))
 
     const matchesTag = selectedTag === 'all' || c.audience_tag === selectedTag
     const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus
+    const matchesSchool = selectedSchool === 'all' || c.organization === selectedSchool
+    const matchesDistrict = selectedDistrict === 'all' || c.district === selectedDistrict
+    const matchesRole = selectedRole === 'all' || c.job_role === selectedRole
 
-    return matchesSearch && matchesTag && matchesStatus
+    return (
+      matchesSearch &&
+      matchesTag &&
+      matchesStatus &&
+      matchesSchool &&
+      matchesDistrict &&
+      matchesRole
+    )
   })
 
   const totalPages = Math.max(1, Math.ceil(filteredContacts.length / PAGE_SIZE))
@@ -183,9 +221,9 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
           <select
             value={selectedTag}
             onChange={(e) => setSelectedTag(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
           >
-            <option value="all">All Audience Tags</option>
+            <option value="all">All Tags</option>
             {uniqueTags.map((tag) => (
               <option key={tag} value={tag}>
                 {tag}
@@ -193,10 +231,55 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
             ))}
           </select>
 
+          {uniqueSchools.length > 0 && (
+            <select
+              value={selectedSchool}
+              onChange={(e) => setSelectedSchool(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="all">All Schools</option>
+              {uniqueSchools.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {uniqueDistricts.length > 0 && (
+            <select
+              value={selectedDistrict}
+              onChange={(e) => setSelectedDistrict(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="all">All Districts</option>
+              {uniqueDistricts.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {uniqueRoles.length > 0 && (
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="all">All Roles</option>
+              {uniqueRoles.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          )}
+
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
           >
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
@@ -302,9 +385,14 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                     <div className="font-mono text-xs text-slate-500">{contact.email}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-slate-800 dark:text-slate-200">
+                    <div className="font-medium text-slate-800 dark:text-slate-200">
                       {contact.organization || '—'}
                     </div>
+                    {contact.district && (
+                      <div className="text-[11px] text-slate-400">
+                        {contact.district}
+                      </div>
+                    )}
                     <div className="text-xs text-slate-500">{contact.job_role || '—'}</div>
                   </td>
                   <td className="px-4 py-3">

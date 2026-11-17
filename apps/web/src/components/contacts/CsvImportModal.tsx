@@ -10,10 +10,10 @@ interface CsvImportModalProps {
   onImported: () => void
 }
 
-const SAMPLE_CSV = `email,first_name,last_name,organization,job_role,audience_tag
-math.lead@school.edu,Firstname,Lastname,Regional High School,Math Department Chair,high_school
-director@stemdistrict.k12.org,Firstname,Lastname,County School District,STEM Coordinator,district_admin
-faculty@academy.org,Firstname,Lastname,Community Prep Academy,Science Educator,educators`
+const SAMPLE_CSV = `email,first_name,last_name,organization,district,job_role,audience_tag
+math.lead@school.edu,Firstname,Lastname,Regional High School,County School District,Math Department Chair,high_school
+director@stemdistrict.k12.org,Firstname,Lastname,,Metro ISD,STEM Coordinator,district_admin
+faculty@academy.org,Firstname,Lastname,Community Prep Academy,East District,Science Educator,educators`
 
 export function CsvImportModal({ existingContacts, onClose, onImported }: CsvImportModalProps) {
   const [csvText, setCsvText] = useState('')
@@ -215,7 +215,8 @@ export function CsvImportModal({ existingContacts, onClose, onImported }: CsvImp
                         <tr>
                           <th className="p-2">Email</th>
                           <th className="p-2">Name</th>
-                          <th className="p-2">Organization</th>
+                          <th className="p-2">School</th>
+                          <th className="p-2">District</th>
                           <th className="p-2">Tag</th>
                         </tr>
                       </thead>
@@ -225,6 +226,7 @@ export function CsvImportModal({ existingContacts, onClose, onImported }: CsvImp
                             <td className="p-2 font-mono">{row.email}</td>
                             <td className="p-2">{row.first_name || ''} {row.last_name || ''}</td>
                             <td className="p-2">{row.organization || '—'}</td>
+                            <td className="p-2">{row.district || '—'}</td>
                             <td className="p-2">
                               <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">
                                 {row.audience_tag || 'none'}

@@ -14,6 +14,8 @@ const KNOWN_VARIABLES = [
   'first_name',
   'last_name',
   'organization',
+  'school',
+  'district',
   'job_role',
   'unsubscribe_url',
 ]
@@ -31,7 +33,10 @@ export function renderTemplateString(
       case 'last_name':
         return contact.last_name?.trim() || ''
       case 'organization':
+      case 'school':
         return contact.organization?.trim() || 'your school'
+      case 'district':
+        return contact.district?.trim() || 'your district'
       case 'job_role':
         return contact.job_role?.trim() || ''
       case 'unsubscribe_url':

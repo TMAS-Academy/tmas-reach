@@ -17,9 +17,20 @@ describe('Template Personalization Engine & Pre-Approval Checks', () => {
   })
 
   it('uses default fallbacks when fields are missing', () => {
-    const raw = 'Hello {{first_name}}, partner with us at {{organization}}.'
+    const raw = 'Hello {{first_name}}, partner with us at {{organization}} in {{district}}.'
     const rendered = renderTemplateString(raw, { contact: {} })
-    expect(rendered).toBe('Hello Educator, partner with us at your school.')
+    expect(rendered).toBe('Hello Educator, partner with us at your school in your district.')
+  })
+
+  it('interpolates district and school alias variables', () => {
+    const raw = 'Programs for {{school}} in {{district}}.'
+    const rendered = renderTemplateString(raw, {
+      contact: {
+        organization: 'Metro High',
+        district: 'Central Unified',
+      },
+    })
+    expect(rendered).toBe('Programs for Metro High in Central Unified.')
   })
 
   it('fails pre-approval validation if {{unsubscribe_url}} is missing', () => {
