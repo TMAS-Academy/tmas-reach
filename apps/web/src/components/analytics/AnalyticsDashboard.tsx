@@ -88,13 +88,20 @@ export function AnalyticsDashboard({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-            Campaign Reporting & Performance
-          </h3>
-          <p className="text-xs text-slate-500">
-            Delivery outcomes, bounce rates, and recipient preference tracking
-          </p>
+        <div className="flex items-center gap-3">
+          <img
+            src="/icons/analytics.jpg"
+            alt=""
+            className="h-11 w-11 rounded-xl object-cover shadow-sm ring-1 ring-amber-400/30 animate-subtle-float"
+          />
+          <div>
+            <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+              Campaign Reporting & Performance
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Audience delivery metrics, bounce tracking, and contact pool health
+            </p>
+          </div>
         </div>
 
         <div>

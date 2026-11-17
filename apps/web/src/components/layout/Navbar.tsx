@@ -67,13 +67,48 @@ export function Navbar({
     }
   }, [isDark])
 
-  const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: 'contacts', label: 'Contacts', icon: <Users className="h-4 w-4" /> },
-    { key: 'intake', label: 'Intake Survey', icon: <School className="h-4 w-4" /> },
-    { key: 'templates', label: 'Templates', icon: <FileText className="h-4 w-4" /> },
-    { key: 'campaigns', label: 'Campaigns', icon: <Send className="h-4 w-4" /> },
-    { key: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },
-    { key: 'logs', label: 'Audit Trail', icon: <History className="h-4 w-4" /> },
+  const navItems: {
+    key: TabKey
+    label: string
+    miniLogo?: string
+    icon: React.ReactNode
+  }[] = [
+    {
+      key: 'contacts',
+      label: 'Contacts',
+      miniLogo: '/icons/contacts.jpg',
+      icon: <Users className="h-4 w-4" />,
+    },
+    {
+      key: 'intake',
+      label: 'Intake Survey',
+      miniLogo: '/icons/intake.jpg',
+      icon: <School className="h-4 w-4" />,
+    },
+    {
+      key: 'templates',
+      label: 'Templates',
+      miniLogo: '/icons/templates.jpg',
+      icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      key: 'campaigns',
+      label: 'Campaigns',
+      miniLogo: '/icons/campaigns.jpg',
+      icon: <Send className="h-4 w-4" />,
+    },
+    {
+      key: 'analytics',
+      label: 'Analytics',
+      miniLogo: '/icons/analytics.jpg',
+      icon: <BarChart2 className="h-4 w-4" />,
+    },
+    {
+      key: 'logs',
+      label: 'Audit Trail',
+      miniLogo: '/icons/audit.jpg',
+      icon: <History className="h-4 w-4" />,
+    },
   ]
 
   if (isAdmin) {
@@ -85,24 +120,25 @@ export function Navbar({
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
+    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs dark:border-slate-800/80 dark:bg-slate-900/95 transition-colors">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <img
             src={tmasLogo}
             alt="TMAS Academy"
-            className="h-10 w-10 rounded-lg object-contain bg-black shadow-sm"
+            className="h-10 w-10 rounded-lg object-contain bg-black shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(250,204,21,0.35)] cursor-pointer"
           />
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
                 TMAS Reach
               </span>
-              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900">
-                v1.0 Release
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-500 dark:bg-amber-400/15 dark:text-amber-300 border border-amber-400/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                v1.0 Live
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Outreach & Campaign Management for TMAS Academy
             </p>
           </div>
@@ -112,7 +148,7 @@ export function Navbar({
           <button
             type="button"
             onClick={() => setIsDark((d) => !d)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition-all hover:scale-102"
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
@@ -132,7 +168,7 @@ export function Navbar({
           <button
             type="button"
             onClick={() => onSelectTab('unsubscribe')}
-            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-all hover:scale-102 ${
               activeTab === 'unsubscribe'
                 ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800'
                 : 'text-slate-600 border-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800'
@@ -143,13 +179,13 @@ export function Navbar({
             <span>Unsubscribe Portal</span>
           </button>
 
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-800/60">
-            <div className="pl-2 text-[11px] text-slate-500">Active Role:</div>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1 dark:border-slate-800 dark:bg-slate-800/80 shadow-xs">
+            <div className="pl-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">Active Role:</div>
             <div className="relative">
               <select
                 value={currentUser.role}
                 onChange={(e) => onRoleChange(e.target.value as UserRole)}
-                className="appearance-none rounded-md bg-white py-1 pl-2.5 pr-7 text-xs font-semibold text-slate-800 shadow-xs focus:border-indigo-500 focus:outline-none dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                className="appearance-none rounded-md bg-white py-1 pl-2.5 pr-7 text-xs font-semibold text-slate-800 shadow-xs focus:border-amber-500 focus:outline-none dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
               >
                 <option value="marketing_intern">Marketing Intern</option>
                 <option value="marketing_lead">Marketing Lead</option>
@@ -162,7 +198,7 @@ export function Navbar({
       </div>
 
       <div className="border-t border-slate-100 px-4 dark:border-slate-800/80">
-        <nav className="mx-auto flex max-w-7xl space-x-1 overflow-x-auto py-1">
+        <nav className="mx-auto flex max-w-7xl space-x-1.5 overflow-x-auto py-1.5">
           {navItems.map((item) => {
             const isActive = activeTab === item.key
             return (
@@ -170,30 +206,49 @@ export function Navbar({
                 key={item.key}
                 type="button"
                 onClick={() => onSelectTab(item.key)}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`group relative inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                   isActive
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200'
+                    ? 'bg-amber-400/15 text-amber-500 dark:text-amber-300 border border-amber-400/40 shadow-xs shadow-amber-400/20 font-semibold scale-[1.02]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-200 border border-transparent'
                 }`}
               >
-                {item.icon}
-                {item.label}
+                {item.miniLogo ? (
+                  <img
+                    src={item.miniLogo}
+                    alt=""
+                    className={`h-5 w-5 rounded-md object-cover transition-transform duration-200 shadow-xs ${
+                      isActive ? 'scale-110 ring-1 ring-amber-400/60' : 'opacity-85 group-hover:scale-105 group-hover:opacity-100'
+                    }`}
+                  />
+                ) : (
+                  item.icon
+                )}
+                <span>{item.label}</span>
+                {isActive && (
+                  <span className="absolute -bottom-1.5 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
+                )}
               </button>
             )
           })}
         </nav>
       </div>
 
-      <div className="bg-slate-50/70 px-4 py-1.5 text-[11px] text-slate-500 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800">
+      <div className="bg-slate-50/70 px-4 py-1.5 text-[11px] text-slate-500 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800/80">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div>
-            Logged in as <strong>{currentUser.full_name}</strong> (
-            <span className="font-mono text-indigo-600 dark:text-indigo-400">
-              {formatRoleLabel(currentUser.role)}
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            )
+            <span>
+              Logged in as <strong className="text-slate-700 dark:text-slate-200">{currentUser.full_name}</strong> (
+              <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                {formatRoleLabel(currentUser.role)}
+              </span>
+              )
+            </span>
           </div>
-          <div className="hidden sm:block">
+          <div className="hidden sm:block text-slate-400 dark:text-slate-500">
             {currentUser.role === 'marketing_intern' &&
               'Permissions: Import/edit contacts, templates, draft campaigns, submit for review.'}
             {currentUser.role === 'marketing_lead' &&

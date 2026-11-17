@@ -18,7 +18,6 @@ import {
   Edit2,
   Lock,
   History,
-  School,
 } from 'lucide-react'
 
 interface ContactListProps {
@@ -145,25 +144,25 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs text-slate-500">Total Contacts</span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.total}</div>
+        <div className="group rounded-xl border border-slate-200/80 bg-white/80 p-3.5 backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800/80 dark:bg-slate-900/80 hover:border-slate-300 dark:hover:border-slate-700">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Contacts</span>
+          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">{stats.total}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs text-emerald-600 dark:text-emerald-400">Active Outreach</span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.active}</div>
+        <div className="group rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-500/40">
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Active Outreach</span>
+          <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.active}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs text-amber-600 dark:text-amber-400">Unsubscribed</span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.unsubscribed}</div>
+        <div className="group rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-amber-500/40">
+          <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Unsubscribed</span>
+          <div className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400 mt-0.5">{stats.unsubscribed}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs text-rose-600 dark:text-rose-400">Hard Bounced</span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.bounced}</div>
+        <div className="group rounded-xl border border-rose-500/20 bg-rose-500/5 p-3.5 backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-rose-500/40">
+          <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Hard Bounced</span>
+          <div className="text-2xl font-bold tracking-tight text-rose-600 dark:text-rose-400 mt-0.5">{stats.bounced}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs text-purple-600 dark:text-purple-400">Suppressed</span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">{stats.suppressed}</div>
+        <div className="group rounded-xl border border-purple-500/20 bg-purple-500/5 p-3.5 backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-purple-500/40">
+          <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">Suppressed</span>
+          <div className="text-2xl font-bold tracking-tight text-purple-600 dark:text-purple-400 mt-0.5">{stats.suppressed}</div>
         </div>
       </div>
 
@@ -210,18 +209,18 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
           <button
             type="button"
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 transition-all hover:scale-102"
             title="Export filtered contacts to CSV"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5 text-slate-400" />
             Export CSV
           </button>
           <button
             type="button"
             onClick={() => setIsCsvOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/90 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 transition-all hover:scale-102"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="h-4 w-4 text-slate-400" />
             Import CSV
           </button>
           <button
@@ -230,7 +229,7 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
               setEditingContact(null)
               setIsFormOpen(true)
             }}
-            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-700 shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 shadow-sm shadow-amber-400/20 transition-all hover:scale-103 active:scale-97 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Add Contact
@@ -254,30 +253,34 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center">
                   {contacts.length === 0 ? (
-                    <div className="mx-auto max-w-md space-y-3">
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
-                        <School className="h-6 w-6" />
+                    <div className="mx-auto max-w-md space-y-4 py-8">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-400 shadow-[0_0_25px_rgba(250,204,21,0.2)] animate-subtle-float">
+                        <img src="/icons/contacts.jpg" alt="" className="h-10 w-10 rounded-xl object-cover shadow-xs" />
                       </div>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                        Zero Placeholder Contacts — Clean Database
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        To maintain sender reputation and CAN-SPAM compliance, collect verified school and educator information via the Educator Outreach Intake Survey or upload a verified CSV.
-                      </p>
+                      <div className="space-y-1">
+                        <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                          Zero Placeholder Contacts — Clean Database
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
+                          To maintain sender reputation and CAN-SPAM compliance, collect verified school and educator information via the Educator Outreach Intake Survey or upload a verified CSV.
+                        </p>
+                      </div>
                       <div className="flex items-center justify-center gap-3 pt-2">
                         <button
                           type="button"
                           onClick={() => setIsSurveyModalOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 shadow-xs"
+                          className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 shadow-sm shadow-amber-400/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                         >
-                          <School className="h-3.5 w-3.5" /> Open Intake Survey
+                          <img src="/icons/intake.jpg" alt="" className="h-4 w-4 rounded-xs object-cover" />
+                          <span>Open Intake Survey</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsCsvOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                         >
-                          <Upload className="h-3.5 w-3.5" /> Upload CSV
+                          <Upload className="h-4 w-4 text-slate-400" />
+                          <span>Upload CSV</span>
                         </button>
                       </div>
                     </div>

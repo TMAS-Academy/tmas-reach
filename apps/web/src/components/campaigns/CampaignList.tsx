@@ -71,20 +71,27 @@ export function CampaignList({ campaigns, templates, contacts, userRole }: Campa
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-            Outreach Campaigns
-          </h3>
-          <p className="text-xs text-slate-500">
-            Enforces strict approval gate: no emails dispatch without explicit lead or admin sign-off
-          </p>
+        <div className="flex items-center gap-3">
+          <img
+            src="/icons/campaigns.jpg"
+            alt=""
+            className="h-11 w-11 rounded-xl object-cover shadow-sm ring-1 ring-amber-400/30 animate-subtle-float"
+          />
+          <div>
+            <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+              Outreach Campaigns
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Enforces strict approval gate: no emails dispatch without explicit lead or admin sign-off
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-semibold focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800/90"
           >
             <option value="all">All Campaign Statuses</option>
             <option value="draft">Draft</option>
@@ -98,7 +105,7 @@ export function CampaignList({ campaigns, templates, contacts, userRole }: Campa
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-700 shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 shadow-sm shadow-amber-400/20 transition-all hover:scale-103 active:scale-97 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             New Campaign

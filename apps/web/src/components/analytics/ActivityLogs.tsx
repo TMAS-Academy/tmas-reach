@@ -15,13 +15,20 @@ export function ActivityLogs({ logs }: ActivityLogsProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-          System Activity & Audit Logs
-        </h3>
-        <p className="text-xs text-slate-500">
-          Immutable audit trail mandated by Section 6 (Security and Responsible Outreach)
-        </p>
+      <div className="flex items-center gap-3">
+        <img
+          src="/icons/audit.jpg"
+          alt=""
+          className="h-11 w-11 rounded-xl object-cover shadow-sm ring-1 ring-amber-400/30 animate-subtle-float"
+        />
+        <div>
+          <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+            System Activity & Audit Logs
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Immutable audit trail mandated by Section 6 (Security and Responsible Outreach)
+          </p>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

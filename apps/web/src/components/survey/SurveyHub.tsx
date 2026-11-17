@@ -95,23 +95,30 @@ export function SurveyHub({ surveys, onToast }: SurveyHubProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Educator Outreach Intake Hub
-          </h2>
-          <p className="text-xs text-slate-500">
-            Collect, verify, and export real school and educator survey data into CSV format for campaign outreach
-          </p>
+        <div className="flex items-center gap-3">
+          <img
+            src="/icons/intake.jpg"
+            alt=""
+            className="h-11 w-11 rounded-xl object-cover shadow-sm ring-1 ring-amber-400/30 animate-subtle-float"
+          />
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Educator Outreach Intake Hub
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Collect, verify, and export real school and educator survey data into CSV format for campaign outreach
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleDownloadBlankTemplate}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 shadow-xs"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 shadow-xs transition-all hover:scale-102"
             title="Download formatted CSV spreadsheet template"
           >
-            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
             Download Blank CSV Template
           </button>
 
@@ -119,19 +126,19 @@ export function SurveyHub({ surveys, onToast }: SurveyHubProps) {
             type="button"
             onClick={handleExportResponsesCsv}
             disabled={surveys.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 shadow-xs disabled:opacity-50 transition-all hover:scale-102"
             title="Export all collected survey responses to CSV"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5 text-slate-400" />
             Export Responses to CSV
           </button>
 
           <button
             type="button"
             onClick={() => setIsSurveyFormOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 shadow-sm shadow-amber-400/20 transition-all hover:scale-103 active:scale-97 cursor-pointer"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             Submit New Survey
           </button>
         </div>

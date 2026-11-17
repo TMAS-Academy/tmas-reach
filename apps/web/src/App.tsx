@@ -54,7 +54,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative selection:bg-amber-400 selection:text-black">
+      {/* Subtle ambient lighting mesh */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-radial from-amber-400/5 via-indigo-500/5 to-transparent blur-3xl dark:from-amber-400/8 dark:via-indigo-500/5"></div>
+      </div>
+
       <Navbar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
