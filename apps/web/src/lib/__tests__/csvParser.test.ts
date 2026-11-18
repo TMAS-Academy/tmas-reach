@@ -79,4 +79,12 @@ describe('CSV Parser and Import Validator', () => {
     expect(res.validRows[0].district).toBe('County ISD')
     expect(res.validRows[0].job_role).toBe('Math Coach')
   })
+
+  it('detects existing active contacts to update when new fields are provided', () => {
+    const csv = 'email,organization,district\nactive@school.edu,Updated School,Updated ISD'
+    const res = parseCsvContent(csv, existingContacts, true)
+    expect(res.validRows.length).toBe(1)
+    expect(res.updatedContacts).toContain('active@school.edu')
+    expect(res.validRows[0].organization).toBe('Updated School')
+  })
 })

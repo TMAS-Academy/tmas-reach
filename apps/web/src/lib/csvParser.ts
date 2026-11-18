@@ -21,6 +21,7 @@ export interface CsvImportAnalysis {
   skippedDuplicates: string[]
   invalidRows: CsvRowError[]
   suppressedExistingEmails: string[]
+  updatedContacts: string[]
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -40,6 +41,7 @@ export function parseCsvContent(
     skippedDuplicates: [],
     invalidRows: [],
     suppressedExistingEmails: [],
+    updatedContacts: [],
   }
 
   if (lines.length < 2) {
@@ -102,20 +104,6 @@ export function parseCsvContent(
     }
     seenInBatch.add(normalizedEmail)
 
-    const existingContact = existingMap.get(normalizedEmail)
-    if (existingContact) {
-      const nonActiveStatuses: ContactStatus[] = ['unsubscribed', 'bounced', 'suppressed']
-      if (nonActiveStatuses.includes(existingContact.status)) {
-        result.suppressedExistingEmails.push(normalizedEmail)
-        continue
-      }
-
-      if (!updateEmptyFields) {
-        result.skippedDuplicates.push(normalizedEmail)
-        continue
-      }
-    }
-
     const row: ParsedContactRow = {
       email: normalizedEmail,
       first_name: firstNameIdx !== -1 ? cols[firstNameIdx]?.trim() || undefined : undefined,
@@ -124,6 +112,35 @@ export function parseCsvContent(
       district: districtIdx !== -1 ? cols[districtIdx]?.trim() || undefined : undefined,
       job_role: roleIdx !== -1 ? cols[roleIdx]?.trim() || undefined : undefined,
       audience_tag: audienceIdx !== -1 ? cols[audienceIdx]?.trim() || undefined : undefined,
+    }
+
+    const existingContact = existingMap.get(normalizedEmail)
+    if (existingContact) {
+      const nonActiveStatuses: ContactStatus[] = ['unsubscribed', 'bounced', 'suppressed']
+      if (nonActiveStatuses.includes(existingContact.status)) {
+        result.suppressedExistingEmails.push(normalizedEmail)
+        continue
+      }
+
+      if (updateEmptyFields) {
+        const hasNewInfo = Boolean(
+          (row.first_name && row.first_name !== existingContact.first_name) ||
+          (row.last_name && row.last_name !== existingContact.last_name) ||
+          (row.organization && row.organization !== existingContact.organization) ||
+          (row.district && row.district !== existingContact.district) ||
+          (row.job_role && row.job_role !== existingContact.job_role) ||
+          (row.audience_tag && row.audience_tag !== existingContact.audience_tag)
+        )
+
+        if (hasNewInfo) {
+          result.updatedContacts.push(normalizedEmail)
+          result.validRows.push(row)
+          continue
+        }
+      }
+
+      result.skippedDuplicates.push(normalizedEmail)
+      continue
     }
 
     result.validRows.push(row)

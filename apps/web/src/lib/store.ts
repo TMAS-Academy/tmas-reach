@@ -404,7 +404,7 @@ export class AppStore {
             'audience_tag',
           ]
           fields.forEach((f) => {
-            if (!existing[f] && row[f]) {
+            if (row[f] && row[f] !== existing[f]) {
               ;(existing as unknown as Record<string, unknown>)[f] = row[f]
               updated = true
             }

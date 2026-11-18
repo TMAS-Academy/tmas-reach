@@ -173,6 +173,12 @@ export function CsvImportModal({ existingContacts, onClose, onImported }: CsvImp
                 </div>
               </div>
 
+              {analysis.updatedContacts && analysis.updatedContacts.length > 0 && (
+                <div className="rounded-md bg-blue-50 p-3 text-xs text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  <strong>Existing Contacts to Update:</strong> {analysis.updatedContacts.length} existing active contact(s) have new details in this CSV and will be updated.
+                </div>
+              )}
+
               {analysis.suppressedExistingEmails.length > 0 && (
                 <div className="rounded-md bg-purple-50 p-3 text-xs text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                   <strong>Suppression Guardrail Active:</strong> {analysis.suppressedExistingEmails.length} recipient(s) are unsubscribed, bounced, or suppressed. Re-activation via CSV import is blocked to maintain compliance.
