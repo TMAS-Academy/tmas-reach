@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderTemplateString, validateCampaignPreApproval } from '../templateEngine'
+import { store } from '../store'
 import type { EmailTemplate } from '../../types'
 
 describe('Template Personalization Engine & Pre-Approval Checks', () => {
@@ -76,5 +77,16 @@ describe('Template Personalization Engine & Pre-Approval Checks', () => {
     const res = validateCampaignPreApproval(template, 25)
     expect(res.valid).toBe(true)
     expect(res.errors.length).toBe(0)
+  })
+
+  it('duplicates existing template with (Copy) suffix', () => {
+    store.resetToDefault()
+
+    const original = store.getTemplates()[0]
+    const res = store.duplicateTemplate(original.id)
+    expect(res.success).toBe(true)
+    expect(res.template?.name).toBe(`${original.name} (Copy)`)
+    expect(res.template?.subject_template).toBe(original.subject_template)
+    expect(res.template?.body_html).toBe(original.body_html)
   })
 })

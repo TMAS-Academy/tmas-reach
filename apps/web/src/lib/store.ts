@@ -458,6 +458,28 @@ export class AppStore {
     return newTemplate
   }
 
+  public duplicateTemplate(templateId: string): { success: boolean; template?: EmailTemplate; error?: string } {
+    const original = this.templates.find((t) => t.id === templateId)
+    if (!original) return { success: false, error: 'Template not found' }
+
+    const now = new Date().toISOString()
+    const newTemplate: EmailTemplate = {
+      id: `tpl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: `${original.name} (Copy)`,
+      subject_template: original.subject_template,
+      body_html: original.body_html,
+      body_text: original.body_text,
+      created_by: this.currentUser.id,
+      created_at: now,
+      updated_at: now,
+    }
+
+    this.templates.unshift(newTemplate)
+    this.logActivity('template_created', 'template', newTemplate.id, { duplicated_from: original.id })
+    this.save()
+    return { success: true, template: newTemplate }
+  }
+
   public updateTemplate(id: string, updates: Partial<EmailTemplate>) {
     this.templates = this.templates.map((t) =>
       t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { EmailTemplate } from '../../types'
 import { TemplateEditorModal } from './TemplateEditorModal'
-import { Plus, Edit2, FileText, CheckCircle, AlertTriangle } from 'lucide-react'
+import { store } from '../../lib/store'
+import { Plus, Edit2, FileText, CheckCircle, AlertTriangle, Copy } from 'lucide-react'
 
 interface TemplateListProps {
   templates: EmailTemplate[]
@@ -61,17 +62,27 @@ export function TemplateList({ templates }: TemplateListProps) {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingTemplate(tpl)
-                      setIsEditorOpen(true)
-                    }}
-                    className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    title="Edit Template"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => store.duplicateTemplate(tpl.id)}
+                      className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                      title="Duplicate Template"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTemplate(tpl)
+                        setIsEditorOpen(true)
+                      }}
+                      className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title="Edit Template"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 rounded-md bg-slate-50 p-3 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
