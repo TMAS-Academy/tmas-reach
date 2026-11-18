@@ -58,4 +58,50 @@ describe('Recipient Delivery Tracking and Bounce Handling', () => {
     const updatedContact = store.getContacts().find((c) => c.id === contact.id)!
     expect(updatedContact.status).toBe('bounced')
   })
+
+  it('prevents duplicate sends to contacts who already received the campaign', () => {
+    store.addContact({
+      email: 'unique.target@school.edu',
+      first_name: 'Alex',
+      status: 'active',
+    })
+    const contact = store.getContacts().find((c) => c.email === 'unique.target@school.edu')!
+
+    store.addTemplate({
+      name: 'No Dupes Template',
+      subject_template: 'Subject {{first_name}}',
+      body_html: '<p>Content</p><a href="{{unsubscribe_url}}">Unsubscribe</a>',
+      body_text: 'Content {{unsubscribe_url}}',
+    })
+    const template = store.getTemplates()[0]
+
+    const campaign = store.addCampaign({
+      name: 'Dedup Send Campaign',
+      template_id: template.id,
+      batch_size: 50,
+      created_by: 'usr-1',
+    })
+
+    store.submitCampaign(campaign.id)
+    store.reviewCampaign(campaign.id, 'approved', 'Approved')
+
+    // Initial dispatch delivers
+    const firstDispatch = store.dispatchCampaignBatch(campaign.id)
+    expect(firstDispatch.sentCount).toBeGreaterThan(0)
+
+    // Manually simulate an extraneous queued recipient row for the same contact
+    store.recipients.push({
+      id: 'rcp-duplicate-test',
+      campaign_id: campaign.id,
+      contact_id: contact.id,
+      delivery_status: 'queued',
+    })
+
+    // Second dispatch must skip the duplicate recipient
+    const secondDispatch = store.dispatchCampaignBatch(campaign.id)
+    expect(secondDispatch.sentCount).toBe(0)
+
+    const dupRecip = store.recipients.find((r) => r.id === 'rcp-duplicate-test')!
+    expect(dupRecip.delivery_status).toBe('skipped_suppressed')
+  })
 })

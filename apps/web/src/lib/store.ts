@@ -569,7 +569,12 @@ export class AppStore {
 
   public dispatchCampaignBatch(id: string): { sentCount: number; errors: string[] } {
     const campaign = this.campaigns.find((c) => c.id === id)
-    if (!campaign || campaign.status !== 'approved') {
+    if (
+      !campaign ||
+      (campaign.status !== 'approved' &&
+        campaign.status !== 'sending' &&
+        campaign.status !== 'completed')
+    ) {
       return { sentCount: 0, errors: ['Campaign must be approved before dispatch.'] }
     }
 
@@ -592,6 +597,18 @@ export class AppStore {
     batch.forEach((rcp) => {
       const contact = this.contacts.find((c) => c.id === rcp.contact_id)
       if (!contact || contact.status !== 'active') {
+        rcp.delivery_status = 'skipped_suppressed'
+        return
+      }
+
+      const alreadyDelivered = this.recipients.some(
+        (other) =>
+          other.campaign_id === id &&
+          other.contact_id === rcp.contact_id &&
+          other.delivery_status === 'delivered' &&
+          other.id !== rcp.id
+      )
+      if (alreadyDelivered) {
         rcp.delivery_status = 'skipped_suppressed'
         return
       }
