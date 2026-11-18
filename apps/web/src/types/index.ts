@@ -43,6 +43,7 @@ export interface Contact {
   audience_tag?: string
   status: ContactStatus
   unsubscribe_token: string
+  notes?: string
   last_contacted_at?: string
   created_by?: string
   created_at: string

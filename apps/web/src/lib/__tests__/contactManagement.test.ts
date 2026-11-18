@@ -37,4 +37,23 @@ describe('Contact Deletion and List Management', () => {
     expect(store.getContacts().some((c) => c.email === 'bulk1@school.org')).toBe(false)
     expect(store.getContacts().some((c) => c.email === 'bulk2@school.org')).toBe(false)
   })
+
+  it('persists and updates internal notes for a contact', () => {
+    store.addContact({
+      email: 'notes.educator@school.org',
+      first_name: 'Robin',
+      notes: 'Initial outreach via state math conference',
+      status: 'active',
+    })
+
+    const contact = store.getContacts().find((c) => c.email === 'notes.educator@school.org')!
+    expect(contact.notes).toBe('Initial outreach via state math conference')
+
+    store.updateContact(contact.id, {
+      notes: 'Followed up; scheduled demo for next month',
+    })
+
+    const updated = store.getContacts().find((c) => c.id === contact.id)!
+    expect(updated.notes).toBe('Followed up; scheduled demo for next month')
+  })
 })

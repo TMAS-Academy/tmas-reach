@@ -480,6 +480,11 @@ export function ContactList({ contacts, campaigns = [], userRole }: ContactListP
                         : '—'}
                     </div>
                     <div className="font-mono text-xs text-slate-500">{contact.email}</div>
+                    {contact.notes && (
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 italic max-w-xs truncate" title={contact.notes}>
+                        {contact.notes}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800 dark:text-slate-200">

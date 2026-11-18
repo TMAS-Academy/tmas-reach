@@ -17,6 +17,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
   const [district, setDistrict] = useState(contact?.district || '')
   const [jobRole, setJobRole] = useState(contact?.job_role || '')
   const [audienceTag, setAudienceTag] = useState(contact?.audience_tag || 'high_school')
+  const [notes, setNotes] = useState(contact?.notes || '')
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -37,6 +38,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         district: district.trim() || undefined,
         job_role: jobRole.trim() || undefined,
         audience_tag: audienceTag.trim() || undefined,
+        notes: notes.trim() || undefined,
       })
       if (!res.success) {
         setError(res.error || 'Failed to update contact.')
@@ -51,6 +53,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         district: district.trim() || undefined,
         job_role: jobRole.trim() || undefined,
         audience_tag: audienceTag.trim() || undefined,
+        notes: notes.trim() || undefined,
         status: 'active',
       })
       if (!res.success) {
@@ -181,6 +184,19 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
                 <option value="nonprofit">Nonprofit / Other</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              Notes & Interaction History
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Spoke at STEM conference; requested geometry curriculum resources."
+              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            />
           </div>
 
           <div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
