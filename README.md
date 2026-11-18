@@ -6,7 +6,7 @@ Internal tool for TMAS Academy to manage school outreach contacts, email templat
 
 ## Status
 
-Active development. 43 passing automated tests across frontend (`apps/web`) and API (`apps/api`).
+Active development. 53 passing automated tests across frontend (`apps/web`) and API (`apps/api`).
 
 ---
 
@@ -20,6 +20,7 @@ Active development. 43 passing automated tests across frontend (`apps/web`) and 
 - **Controlled Batch Sending**: Dispatches recipients in configurable batch sizes. Shows recipient delivery status (`queued`, `delivered`, `bounced`, `suppressed`) with simulated bounce testing.
 - **Analytics**: Tracks sent count, delivery rate, bounce rate, and unsubscribe rate. Includes a breakdown table grouping deliveries by school and district.
 - **Unsubscribe Portal**: Public endpoint (`/unsubscribe/:token`) letting recipients opt out. Opted-out contacts are suppressed from all future campaigns.
+- **Team Roster & CSV Import**: Import staff and interns from a CSV with `email,name,role`. Accepts arbitrary personal and university email domains without hardcoding `@tmasacademy.org`.
 - **Role-Based Access Control**:
   - `marketing_intern`: Add/edit contacts, templates, draft campaigns, submit for review.
   - `marketing_lead`: Campaign approvals, manual contact suppression, batch dispatch.

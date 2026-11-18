@@ -14,8 +14,8 @@ import { validateCampaignPreApproval } from './templateEngine'
 const SEED_USERS: User[] = [
   {
     id: 'usr-1',
-    email: 'intern@tmasacademy.org',
-    full_name: 'TMAS Outreach Intern',
+    email: 'intern@example.com',
+    full_name: 'Outreach Intern',
     role: 'marketing_intern',
     is_active: true,
     created_at: '2026-09-01T08:00:00Z',
@@ -23,8 +23,8 @@ const SEED_USERS: User[] = [
   },
   {
     id: 'usr-2',
-    email: 'lead@tmasacademy.org',
-    full_name: 'TMAS Outreach Lead',
+    email: 'lead@example.com',
+    full_name: 'Outreach Lead',
     role: 'marketing_lead',
     is_active: true,
     created_at: '2026-08-15T08:00:00Z',
@@ -32,8 +32,8 @@ const SEED_USERS: User[] = [
   },
   {
     id: 'usr-3',
-    email: 'admin@tmasacademy.org',
-    full_name: 'TMAS Administrator',
+    email: 'admin@example.com',
+    full_name: 'Administrator',
     role: 'administrator',
     is_active: true,
     created_at: '2026-08-01T08:00:00Z',
@@ -186,6 +186,107 @@ export class AppStore {
     const user = this.users.find((u) => u.role === role) || this.users[0]
     this.currentUser = user
     this.notify()
+  }
+
+  public setCurrentUser(userId: string) {
+    const user = this.users.find((u) => u.id === userId)
+    if (user) {
+      this.currentUser = user
+      this.notify()
+    }
+  }
+
+  public addUser(data: { email: string; full_name: string; role: UserRole }): { success: boolean; user?: User; error?: string } {
+    const emailNorm = data.email.trim().toLowerCase()
+    if (!emailNorm) {
+      return { success: false, error: 'Email address is required.' }
+    }
+    if (this.users.some((u) => u.email.toLowerCase() === emailNorm)) {
+      return { success: false, error: `A team member with email "${emailNorm}" already exists.` }
+    }
+
+    const newUser: User = {
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      email: emailNorm,
+      full_name: data.full_name.trim() || emailNorm.split('@')[0],
+      role: data.role,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    this.users.push(newUser)
+    this.logActivity('user_created', 'user', newUser.id, { email: emailNorm, role: data.role })
+    this.save()
+    return { success: true, user: newUser }
+  }
+
+  public deleteUser(userId: string): { success: boolean; error?: string } {
+    const user = this.users.find((u) => u.id === userId)
+    if (!user) return { success: false, error: 'User not found.' }
+
+    if (user.role === 'administrator') {
+      const adminCount = this.users.filter((u) => u.role === 'administrator').length
+      if (adminCount <= 1) {
+        return { success: false, error: 'Cannot remove the last administrator.' }
+      }
+    }
+
+    this.users = this.users.filter((u) => u.id !== userId)
+    if (this.currentUser.id === userId) {
+      this.currentUser = this.users[0]
+    }
+
+    this.logActivity('user_deleted', 'user', userId, { email: user.email })
+    this.save()
+    return { success: true }
+  }
+
+  public importUsers(rows: { email: string; full_name?: string; role?: UserRole }[]): { imported: number; updated: number } {
+    let imported = 0
+    let updated = 0
+    const now = new Date().toISOString()
+
+    rows.forEach((row) => {
+      const emailNorm = row.email.trim().toLowerCase()
+      if (!emailNorm) return
+
+      const existing = this.users.find((u) => u.email.toLowerCase() === emailNorm)
+      if (existing) {
+        let changed = false
+        if (row.full_name && row.full_name !== existing.full_name) {
+          existing.full_name = row.full_name
+          changed = true
+        }
+        if (row.role && row.role !== existing.role) {
+          existing.role = row.role
+          changed = true
+        }
+        if (changed) {
+          existing.updated_at = now
+          updated++
+        }
+      } else {
+        const newUser: User = {
+          id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          email: emailNorm,
+          full_name: row.full_name?.trim() || emailNorm.split('@')[0],
+          role: row.role || 'marketing_intern',
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        }
+        this.users.push(newUser)
+        imported++
+      }
+    })
+
+    if (imported > 0 || updated > 0) {
+      this.logActivity('team_csv_imported', 'user', undefined, { imported, updated })
+      this.save()
+    }
+
+    return { imported, updated }
   }
 
   public updateUserRole(userId: string, newRole: UserRole) {

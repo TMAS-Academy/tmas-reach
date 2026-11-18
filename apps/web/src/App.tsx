@@ -64,6 +64,17 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         currentUser={currentUser}
+        users={users}
+        onSelectUser={(userId) => {
+          store.setCurrentUser(userId)
+          const target = users.find((u) => u.id === userId)
+          if (target) {
+            addToast('info', `Switched active user to ${target.full_name} (${target.email})`)
+            if (target.role !== 'administrator' && activeTab === 'admin') {
+              setActiveTab('contacts')
+            }
+          }
+        }}
         onRoleChange={handleRoleChange}
       />
 
@@ -102,7 +113,7 @@ export default function App() {
         {activeTab === 'logs' && <ActivityLogs logs={logs} />}
 
         {activeTab === 'admin' && currentUser.role === 'administrator' && (
-          <UserManagement users={users} />
+          <UserManagement users={users} onToast={addToast} />
         )}
 
         {activeTab === 'unsubscribe' && (

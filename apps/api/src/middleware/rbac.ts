@@ -33,9 +33,11 @@ export function extractAuthUser(req: ApiRequest): AuthUser | null {
     return null
   }
 
+  const emailHeader = (req.headers['x-user-email'] as string | undefined)?.trim()
+
   return {
     id: userIdHeader,
-    email: `${userIdHeader}@tmasacademy.org`,
+    email: emailHeader || `${userIdHeader}@example.com`,
     role,
   }
 }

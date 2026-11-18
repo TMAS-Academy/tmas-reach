@@ -30,6 +30,8 @@ interface NavbarProps {
   activeTab: TabKey
   onSelectTab: (tab: TabKey) => void
   currentUser: User
+  users?: User[]
+  onSelectUser?: (userId: string) => void
   onRoleChange: (role: UserRole) => void
 }
 
@@ -37,6 +39,8 @@ export function Navbar({
   activeTab,
   onSelectTab,
   currentUser,
+  users,
+  onSelectUser,
   onRoleChange,
 }: NavbarProps) {
   const isAdmin = currentUser.role === 'administrator'
@@ -162,16 +166,32 @@ export function Navbar({
           </button>
 
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1 dark:border-slate-800 dark:bg-slate-800/80 shadow-xs">
-            <div className="pl-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">Active Role:</div>
+            <div className="pl-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">Team Member:</div>
             <div className="relative">
               <select
-                value={currentUser.role}
-                onChange={(e) => onRoleChange(e.target.value as UserRole)}
+                value={users && users.length > 0 ? currentUser.id : currentUser.role}
+                onChange={(e) => {
+                  if (users && onSelectUser) {
+                    onSelectUser(e.target.value)
+                  } else {
+                    onRoleChange(e.target.value as UserRole)
+                  }
+                }}
                 className="appearance-none rounded-md bg-white py-1 pl-2.5 pr-7 text-xs font-semibold text-slate-800 shadow-xs focus:border-amber-500 focus:outline-none dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
               >
-                <option value="marketing_intern">Marketing Intern</option>
-                <option value="marketing_lead">Marketing Lead</option>
-                <option value="administrator">Administrator</option>
+                {users && users.length > 0 ? (
+                  users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({formatRoleLabel(u.role)})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="marketing_intern">Marketing Intern</option>
+                    <option value="marketing_lead">Marketing Lead</option>
+                    <option value="administrator">Administrator</option>
+                  </>
+                )}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -222,6 +242,7 @@ export function Navbar({
             </span>
             <span>
               Logged in as <strong className="text-slate-700 dark:text-slate-200">{currentUser.full_name}</strong> (
+              <span className="font-mono text-slate-500 dark:text-slate-400">{currentUser.email}</span> ·{' '}
               <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
                 {formatRoleLabel(currentUser.role)}
               </span>
