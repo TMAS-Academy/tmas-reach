@@ -15,6 +15,8 @@ import {
   Moon,
   School,
   Search,
+  KeyRound,
+  LogOut,
 } from 'lucide-react'
 
 export type TabKey =
@@ -39,6 +41,10 @@ interface NavbarProps {
   onOpenCommandPalette: () => void
   pendingApprovalsCount?: number
   pendingSurveysCount?: number
+  isApiMode?: boolean
+  onSignOut?: () => void
+  onOpenChangePassword?: () => void
+  onSyncNow?: () => void
 }
 
 export function Navbar({
@@ -53,6 +59,9 @@ export function Navbar({
   onOpenCommandPalette,
   pendingApprovalsCount = 0,
   pendingSurveysCount = 0,
+  isApiMode = false,
+  onSignOut,
+  onOpenChangePassword,
 }: NavbarProps) {
   const isAdmin = currentUser.role === 'administrator'
 
@@ -175,47 +184,90 @@ export function Navbar({
             <span className="hidden md:inline">Unsubscribe</span>
           </button>
 
-          <div
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-2 py-1 dark:border-slate-800 dark:bg-slate-800/80"
-            title={`Signed in as ${currentUser.full_name} (${currentUser.email})`}
-          >
-            <span
-              className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-              aria-hidden="true"
-            />
-            <div className="relative">
-              <label htmlFor="active-user-select" className="sr-only">
-                Active team member
-              </label>
-              <select
-                id="active-user-select"
-                value={users && users.length > 0 ? currentUser.id : currentUser.role}
-                onChange={(e) => {
-                  if (users && onSelectUser) {
-                    onSelectUser(e.target.value)
-                  } else {
-                    onRoleChange(e.target.value as UserRole)
-                  }
-                }}
-                className="appearance-none rounded-md bg-white py-0.5 pl-2 pr-6 text-xs font-semibold text-slate-800 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 cursor-pointer"
+          {isApiMode ? (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-2.5 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-800/80"
+                title={`Signed in as ${currentUser.full_name} (${currentUser.email})`}
               >
-                {users && users.length > 0 ? (
-                  users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({formatRoleLabel(u.role)})
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="marketing_intern">Marketing Intern</option>
-                    <option value="marketing_lead">Marketing Lead</option>
-                    <option value="administrator">Administrator</option>
-                  </>
-                )}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-1.5 top-1.5 h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                  aria-hidden="true"
+                />
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {currentUser.full_name}
+                </span>
+                <span className="hidden sm:inline rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-400/20 dark:text-amber-300">
+                  {formatRoleLabel(currentUser.role)}
+                </span>
+              </div>
+              {onOpenChangePassword && (
+                <button
+                  type="button"
+                  onClick={onOpenChangePassword}
+                  title="Change password"
+                  aria-label="Change password"
+                  className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline">Sign Out</span>
+                </button>
+              )}
             </div>
-          </div>
+          ) : (
+            <div
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/90 px-2 py-1 dark:border-slate-800 dark:bg-slate-800/80"
+              title={`Signed in as ${currentUser.full_name} (${currentUser.email})`}
+            >
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                aria-hidden="true"
+              />
+              <div className="relative">
+                <label htmlFor="active-user-select" className="sr-only">
+                  Active team member
+                </label>
+                <select
+                  id="active-user-select"
+                  value={users && users.length > 0 ? currentUser.id : currentUser.role}
+                  onChange={(e) => {
+                    if (users && onSelectUser) {
+                      onSelectUser(e.target.value)
+                    } else {
+                      onRoleChange(e.target.value as UserRole)
+                    }
+                  }}
+                  className="appearance-none rounded-md bg-white py-0.5 pl-2 pr-6 text-xs font-semibold text-slate-800 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                >
+                  {users && users.length > 0 ? (
+                    users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({formatRoleLabel(u.role)})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="marketing_intern">Marketing Intern</option>
+                      <option value="marketing_lead">Marketing Lead</option>
+                      <option value="administrator">Administrator</option>
+                    </>
+                  )}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-1.5 top-1.5 h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

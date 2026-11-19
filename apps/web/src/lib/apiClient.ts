@@ -16,6 +16,7 @@ export interface ApiRequestOptions {
   timeoutMs?: number
   maxRetries?: number
   signal?: AbortSignal
+  skipAuth?: boolean
 }
 
 export interface HealthCheckResult {
@@ -57,6 +58,8 @@ export class ApiClient {
   private readonly baseDelayMs: number
   private readonly fetchImpl: typeof fetch
   private readonly getAuthContext?: () => { userId?: string; role?: UserRole; token?: string }
+  private authToken: string | null = null
+  private readonly unauthorizedListeners = new Set<() => void>()
 
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = (config.baseUrl ?? resolveEnvBaseUrl()).trim().replace(/\/+$/, '')
@@ -65,6 +68,22 @@ export class ApiClient {
     this.baseDelayMs = config.baseDelayMs ?? 250
     this.fetchImpl = config.fetchImpl ?? ((input, init) => globalThis.fetch(input, init))
     this.getAuthContext = config.getAuthContext
+  }
+
+  public setAuthToken(token: string | null) {
+    const trimmed = token?.trim() || null
+    this.authToken = trimmed
+  }
+
+  public getAuthToken(): string | null {
+    return this.authToken
+  }
+
+  public onUnauthorized(listener: () => void): () => void {
+    this.unauthorizedListeners.add(listener)
+    return () => {
+      this.unauthorizedListeners.delete(listener)
+    }
   }
 
   public isConfigured(): boolean {
@@ -88,13 +107,18 @@ export class ApiClient {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
     const url = `${this.baseUrl}${normalizedPath}`
 
-    const auth = this.getAuthContext?.()
+    const auth = !options.skipAuth && !this.authToken ? this.getAuthContext?.() : undefined
+    const sentBearer = !options.skipAuth && Boolean(this.authToken || auth?.token)
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(auth?.role ? { 'x-user-role': auth.role } : {}),
       ...(auth?.userId ? { 'x-user-id': auth.userId } : {}),
-      ...(auth?.token ? { Authorization: `Bearer ${auth.token}` } : {}),
+      ...(!options.skipAuth && this.authToken
+        ? { Authorization: `Bearer ${this.authToken}` }
+        : auth?.token
+          ? { Authorization: `Bearer ${auth.token}` }
+          : {}),
       ...options.headers,
     }
 
@@ -162,6 +186,16 @@ export class ApiClient {
           retryable,
           details: errorPayload,
         })
+
+        if (response.status === 401 && sentBearer && normalizedPath !== '/api/auth/change-password') {
+          this.unauthorizedListeners.forEach((listener) => {
+            try {
+              listener()
+            } catch {
+              // Ignore listener errors
+            }
+          })
+        }
 
         if (!retryable || attempt === maxRetries) {
           throw lastError

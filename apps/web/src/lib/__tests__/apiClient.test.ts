@@ -138,4 +138,29 @@ describe('ApiClient resilience, headers, retry, timeout, and health probe', () =
     expect(failHealth.configured).toBe(true)
     expect(failHealth.mode).toBe('local')
   })
+
+  it('omits dev headers when bearer token is set and notifies onUnauthorized on 401', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+    const onUnauth = vi.fn()
+    const client = new ApiClient({
+      baseUrl: 'https://api.example.org',
+      fetchImpl: mockFetch,
+      getAuthContext: () => ({ userId: 'usr-1', role: 'administrator' }),
+    })
+    client.setAuthToken('jwt_real_token')
+    client.onUnauthorized(onUnauth)
+
+    await expect(client.get('/api/contacts')).rejects.toThrow(/Unauthorized/i)
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const headers = init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer jwt_real_token')
+    expect(headers['x-user-role']).toBeUndefined()
+    expect(headers['x-user-id']).toBeUndefined()
+    expect(onUnauth).toHaveBeenCalledTimes(1)
+  })
 })
