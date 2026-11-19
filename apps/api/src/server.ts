@@ -13,6 +13,7 @@ import { registerSurveyRoutes } from './routes/surveys.js'
 import { registerUnsubscribeRoutes } from './routes/unsubscribe.js'
 import { registerWebhookRoutes } from './routes/webhooks.js'
 import { registerAuthRoutes, seedBootstrapAdminFromConfig } from './routes/auth.js'
+import { registerSystemRoutes } from './routes/system.js'
 import { startBatchSchedulerLoop, stopBatchSchedulerLoop } from './services/batchScheduler.js'
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'OPTIONS'
@@ -399,6 +400,7 @@ export function buildDefaultRouter(): Router {
   registerUnsubscribeRoutes(router)
   registerWebhookRoutes(router)
   registerLogRoutes(router)
+  registerSystemRoutes(router)
 
   return router
 }

@@ -1,10 +1,12 @@
 import crypto from 'node:crypto'
 import type { ApiRequest, ApiResponse, Router } from '../server.js'
 import { requireAuth } from '../middleware/rbac.js'
+import { usersDb } from './auth.js'
 
 export interface ActivityLogRecord {
   id: string
   actor_id: string | null
+  actor_name?: string
   action: string
   entity_type: string
   entity_id?: string | null
@@ -18,15 +20,28 @@ const MAX_IN_MEMORY_LOGS = 2000
 
 export function appendActivityLog(input: {
   actor_id?: string | null
+  actor_name?: string
   action: string
   entity_type: string
   entity_id?: string | null
   metadata?: Record<string, unknown>
   created_at?: string
 }): ActivityLogRecord {
+  const actorId = input.actor_id ?? null
+  let resolvedActorName = input.actor_name
+  if (!resolvedActorName) {
+    if (actorId) {
+      const matchedUser = usersDb.find((u) => u.id === actorId)
+      resolvedActorName = matchedUser?.full_name || actorId
+    } else {
+      resolvedActorName = 'System / Public'
+    }
+  }
+
   const entry: ActivityLogRecord = {
     id: `log_${crypto.randomUUID()}`,
-    actor_id: input.actor_id ?? null,
+    actor_id: actorId,
+    actor_name: resolvedActorName,
     action: input.action,
     entity_type: input.entity_type,
     entity_id: input.entity_id ?? null,

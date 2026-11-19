@@ -38,6 +38,7 @@ export interface CampaignRecord {
   batch_size: number
   created_by: string
   reviewed_by?: string
+  reviewed_at?: string
   review_notes?: string
   created_at: string
   updated_at: string
@@ -68,6 +69,7 @@ export interface CampaignRecipientRecord {
   sent_at?: string
   delivered_at?: string
   bounced_at?: string
+  created_at?: string
 }
 
 export const templatesDb: EmailTemplateRecord[] = [
@@ -92,6 +94,7 @@ function renderTemplateText(
     first_name: string
     last_name: string
     organization: string
+    district?: string
     job_role: string
     unsubscribe_url: string
   }
@@ -100,6 +103,8 @@ function renderTemplateText(
     .replace(/\{\{\s*first_name\s*\}\}/g, values.first_name)
     .replace(/\{\{\s*last_name\s*\}\}/g, values.last_name)
     .replace(/\{\{\s*organization\s*\}\}/g, values.organization)
+    .replace(/\{\{\s*school\s*\}\}/g, values.organization)
+    .replace(/\{\{\s*district\s*\}\}/g, values.district || '')
     .replace(/\{\{\s*job_role\s*\}\}/g, values.job_role)
     .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, values.unsubscribe_url)
 }
@@ -152,6 +157,115 @@ export function registerCampaignRoutes(router: Router) {
       metadata: { name: newTemplate.name },
     })
     res.status(201).json(newTemplate)
+  })
+
+  // PATCH /api/templates/:id
+  router.patch('/api/templates/:id', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const template = templatesDb.find((t) => t.id === req.params.id)
+    if (!template) {
+      res.status(404).json({ error: 'Template not found.' })
+      return
+    }
+
+    const { name, subject_template, body_html, body_text } = req.body || {}
+    const nextSubject = typeof subject_template === 'string' ? subject_template.trim() : template.subject_template
+    const nextHtml = body_html !== undefined ? (typeof body_html === 'string' ? body_html : '') : template.body_html
+    const nextText = body_text !== undefined ? (typeof body_text === 'string' ? body_text : '') : template.body_text
+    const nextName = typeof name === 'string' ? name.trim() : template.name
+
+    if (!nextName || !nextSubject) {
+      res.status(400).json({ error: 'name and subject_template cannot be empty.' })
+      return
+    }
+
+    if (!`${nextHtml || ''} ${nextText || ''}`.includes('{{unsubscribe_url}}')) {
+      res.status(400).json({
+        error: 'CAN-SPAM compliance error: Template body must contain {{unsubscribe_url}} tag.',
+      })
+      return
+    }
+
+    template.name = nextName
+    template.subject_template = nextSubject
+    template.body_html = nextHtml
+    template.body_text = nextText
+    template.updated_at = new Date().toISOString()
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'template.updated',
+      entity_type: 'email_template',
+      entity_id: template.id,
+      metadata: { name: template.name },
+    })
+    res.status(200).json(template)
+  })
+
+  // DELETE /api/templates/:id
+  router.delete('/api/templates/:id', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const idx = templatesDb.findIndex((t) => t.id === req.params.id)
+    if (idx === -1) {
+      res.status(404).json({ error: 'Template not found.' })
+      return
+    }
+
+    const template = templatesDb[idx]
+    if (campaignsDb.some((c) => c.template_id === template.id)) {
+      res.status(409).json({
+        error: 'Template is referenced by an existing campaign and cannot be deleted.',
+      })
+      return
+    }
+
+    templatesDb.splice(idx, 1)
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'template.deleted',
+      entity_type: 'email_template',
+      entity_id: template.id,
+      metadata: { name: template.name },
+    })
+    res.status(200).json({ deleted: true, id: template.id })
+  })
+
+  // POST /api/templates/:id/duplicate
+  router.post('/api/templates/:id/duplicate', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const source = templatesDb.find((t) => t.id === req.params.id)
+    if (!source) {
+      res.status(404).json({ error: 'Template not found.' })
+      return
+    }
+
+    const now = new Date().toISOString()
+    const copy: EmailTemplateRecord = {
+      id: `tmpl_${crypto.randomUUID()}`,
+      name: `${source.name} (Copy)`,
+      subject_template: source.subject_template,
+      body_html: source.body_html,
+      body_text: source.body_text,
+      created_by: user.id,
+      created_at: now,
+      updated_at: now,
+    }
+
+    templatesDb.unshift(copy)
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'template.duplicated',
+      entity_type: 'email_template',
+      entity_id: copy.id,
+      metadata: { source_id: source.id, name: copy.name },
+    })
+    res.status(201).json(copy)
   })
 
   // GET /api/campaigns
@@ -223,6 +337,111 @@ export function registerCampaignRoutes(router: Router) {
       metadata: { name: newCampaign.name, batch_size: newCampaign.batch_size },
     })
     res.status(201).json(newCampaign)
+  })
+
+  // PATCH /api/campaigns/:id — Update draft or rejected campaign
+  router.patch('/api/campaigns/:id', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const campaign = campaignsDb.find((c) => c.id === req.params.id)
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+
+    if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+      res.status(400).json({
+        error: `Only draft or rejected campaigns can be edited (current status: "${campaign.status}").`,
+      })
+      return
+    }
+
+    const { name, template_id, target_audience_tag, scheduled_at, batch_size } = req.body || {}
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        res.status(400).json({ error: 'Campaign name cannot be empty.' })
+        return
+      }
+      campaign.name = name.trim()
+    }
+
+    if (template_id !== undefined) {
+      const tpl = templatesDb.find((t) => t.id === template_id)
+      if (!tpl) {
+        res.status(404).json({ error: 'Template not found.' })
+        return
+      }
+      campaign.template_id = template_id
+    }
+
+    if (target_audience_tag !== undefined) {
+      if (typeof target_audience_tag !== 'string' || !target_audience_tag.trim()) {
+        res.status(400).json({ error: 'target_audience_tag cannot be empty.' })
+        return
+      }
+      campaign.target_audience_tag = target_audience_tag.trim()
+    }
+
+    if (batch_size !== undefined) {
+      const parsedBatchSize = Number(batch_size)
+      if (!Number.isInteger(parsedBatchSize) || parsedBatchSize < 1 || parsedBatchSize > 500) {
+        res.status(400).json({ error: 'batch_size must be an integer between 1 and 500.' })
+        return
+      }
+      campaign.batch_size = parsedBatchSize
+    }
+
+    if (scheduled_at !== undefined) {
+      if (scheduled_at === null || scheduled_at === '') {
+        campaign.scheduled_at = undefined
+      } else if (typeof scheduled_at !== 'string' || Number.isNaN(Date.parse(scheduled_at))) {
+        res.status(400).json({ error: 'scheduled_at must be a valid ISO-8601 timestamp.' })
+        return
+      } else {
+        campaign.scheduled_at = scheduled_at
+      }
+    }
+
+    campaign.updated_at = new Date().toISOString()
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'campaign.updated',
+      entity_type: 'campaign',
+      entity_id: campaign.id,
+      metadata: { name: campaign.name, status: campaign.status },
+    })
+
+    res.status(200).json(campaign)
+  })
+
+  // POST /api/campaigns/:id/reopen — Return a rejected campaign to draft
+  router.post('/api/campaigns/:id/reopen', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const campaign = campaignsDb.find((c) => c.id === req.params.id)
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+
+    if (campaign.status !== 'rejected') {
+      res.status(400).json({ error: 'Only rejected campaigns can be reopened.' })
+      return
+    }
+
+    campaign.status = 'draft'
+    campaign.updated_at = new Date().toISOString()
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'campaign.reopened',
+      entity_type: 'campaign',
+      entity_id: campaign.id,
+    })
+
+    res.status(200).json(campaign)
   })
 
   // POST /api/campaigns/:id/submit — Move draft or rejected -> pending_approval
@@ -309,6 +528,7 @@ export function registerCampaignRoutes(router: Router) {
 
       campaign.status = 'approved'
       campaign.reviewed_by = user.id
+      campaign.reviewed_at = new Date().toISOString()
       campaign.review_notes = typeof review_notes === 'string' && review_notes.trim() ? review_notes.trim() : 'Approved for dispatch'
 
       const publicUrl = getConfig().appPublicUrl
@@ -318,6 +538,7 @@ export function registerCampaignRoutes(router: Router) {
           .map((r) => r.contact_id)
       )
 
+      const snapshotNow = new Date().toISOString()
       for (const c of matchingActive) {
         if (existingContactIds.has(c.id)) {
           continue
@@ -329,6 +550,7 @@ export function registerCampaignRoutes(router: Router) {
           first_name: c.first_name || 'Educator',
           last_name: c.last_name || '',
           organization: c.organization || 'your school',
+          district: c.district || '',
           job_role: c.job_role || '',
           unsubscribe_url: unsubsUrl,
         }
@@ -348,6 +570,7 @@ export function registerCampaignRoutes(router: Router) {
           personalized_body: personalizedBody,
           delivery_status: 'queued',
           retry_count: 0,
+          created_at: snapshotNow,
         })
       }
 
@@ -361,6 +584,7 @@ export function registerCampaignRoutes(router: Router) {
     } else {
       campaign.status = 'rejected'
       campaign.reviewed_by = user.id
+      campaign.reviewed_at = new Date().toISOString()
       campaign.review_notes =
         typeof review_notes === 'string' && review_notes.trim() ? review_notes.trim() : 'Requires revision'
 
@@ -416,6 +640,100 @@ export function registerCampaignRoutes(router: Router) {
       campaign,
       dispatch,
     })
+  })
+
+  // POST /api/campaigns/:id/test-send — Send a single rendered preview email via configured provider
+  router.post('/api/campaigns/:id/test-send', async (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const campaign = campaignsDb.find((c) => c.id === req.params.id)
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+
+    const template = templatesDb.find((t) => t.id === campaign.template_id)
+    if (!template) {
+      res.status(404).json({ error: 'Campaign template not found' })
+      return
+    }
+
+    const targetTo =
+      typeof req.body?.to === 'string' && req.body.to.trim()
+        ? req.body.to.trim().toLowerCase()
+        : user.email
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetTo)) {
+      res.status(400).json({ error: 'A valid recipient email is required for test send.' })
+      return
+    }
+
+    const config = getConfig()
+    const providerMode =
+      config.resendApiKey && config.resendApiKey !== 'your-resend-api-key' ? 'resend' : 'mock'
+    const values = {
+      first_name: user.full_name?.split(' ')[0] || 'Preview',
+      last_name: user.full_name?.split(' ').slice(1).join(' ') || 'Educator',
+      organization: 'Oak Ridge High School',
+      district: 'Metro School District',
+      job_role: 'Math Department Chair',
+      unsubscribe_url: `${config.appPublicUrl}/unsubscribe/preview-test-token`,
+    }
+
+    const renderedSubject = `[TEST] ${renderTemplateText(template.subject_template, values)}`
+    const renderedText = renderTemplateText(template.body_text || template.body_html || '', values)
+    const renderedHtml = template.body_html ? renderTemplateText(template.body_html, values) : undefined
+
+    const provider = createEmailProvider(config)
+    const sendRes = await provider.sendEmail(targetTo, renderedSubject, renderedText, {
+      html: renderedHtml,
+    })
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'campaign.test_sent',
+      entity_type: 'campaign',
+      entity_id: campaign.id,
+      metadata: { to: targetTo, providerMode, success: sendRes.success },
+    })
+
+    if (!sendRes.success) {
+      res.status(502).json({
+        success: false,
+        to: targetTo,
+        providerMode,
+        error: sendRes.error || 'Failed to send test email.',
+      })
+      return
+    }
+
+    res.status(200).json({
+      success: true,
+      to: targetTo,
+      messageId: sendRes.messageId,
+      providerMode,
+    })
+  })
+
+  // GET /api/recipients — List all campaign recipients
+  router.get('/api/recipients', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+    res.status(200).json(campaignRecipientsDb)
+  })
+
+  // GET /api/campaigns/:id/recipients — List recipients for a campaign
+  router.get('/api/campaigns/:id/recipients', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const campaign = campaignsDb.find((c) => c.id === req.params.id)
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+
+    res.status(200).json(campaignRecipientsDb.filter((r) => r.campaign_id === campaign.id))
   })
 
   // GET /api/campaigns/:id/report — Campaign delivery summary

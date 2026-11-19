@@ -12,10 +12,13 @@ export interface ContactRecord {
   first_name?: string
   last_name?: string
   organization?: string
+  district?: string
   job_role?: string
   audience_tag?: string
   status: ContactStatus
   unsubscribe_token: string
+  notes?: string
+  last_contacted_at?: string
   created_by: string
   created_at: string
   updated_at: string
@@ -163,7 +166,7 @@ export function registerContactRoutes(router: Router) {
     const user = requireAuth(req, res)
     if (!user) return
 
-    const { email, first_name, last_name, organization, job_role, audience_tag } = req.body || {}
+    const { email, first_name, last_name, organization, district, job_role, audience_tag, notes } = req.body || {}
 
     if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim().toLowerCase())) {
       res.status(400).json({ error: 'A valid email is required' })
@@ -184,10 +187,12 @@ export function registerContactRoutes(router: Router) {
       first_name: typeof first_name === 'string' ? first_name.trim() : '',
       last_name: typeof last_name === 'string' ? last_name.trim() : '',
       organization: typeof organization === 'string' ? organization.trim() : '',
+      district: typeof district === 'string' ? district.trim() : '',
       job_role: typeof job_role === 'string' ? job_role.trim() : '',
       audience_tag: typeof audience_tag === 'string' && audience_tag.trim() ? audience_tag.trim() : 'educators',
       status: 'active',
       unsubscribe_token: generateUnsubscribeToken(),
+      notes: typeof notes === 'string' ? notes.trim() : '',
       created_by: user.id,
       created_at: now,
       updated_at: now,
@@ -216,7 +221,7 @@ export function registerContactRoutes(router: Router) {
       return
     }
 
-    const { status, email, first_name, last_name, organization, job_role, audience_tag } = req.body || {}
+    const { status, email, first_name, last_name, organization, district, job_role, audience_tag, notes } = req.body || {}
 
     if (status !== undefined) {
       if (typeof status !== 'string' || !VALID_CONTACT_STATUSES.has(status as ContactStatus)) {
@@ -234,6 +239,13 @@ export function registerContactRoutes(router: Router) {
           if (!checkLead) return
         }
         contact.status = status as ContactStatus
+        if (status !== 'active') {
+          for (const r of campaignRecipientsDb) {
+            if (r.contact_id === contact.id && r.delivery_status === 'queued') {
+              r.delivery_status = 'skipped_suppressed'
+            }
+          }
+        }
       }
     }
 
@@ -255,8 +267,10 @@ export function registerContactRoutes(router: Router) {
     if (first_name !== undefined) contact.first_name = String(first_name).trim()
     if (last_name !== undefined) contact.last_name = String(last_name).trim()
     if (organization !== undefined) contact.organization = String(organization).trim()
+    if (district !== undefined) contact.district = String(district).trim()
     if (job_role !== undefined) contact.job_role = String(job_role).trim()
     if (audience_tag !== undefined) contact.audience_tag = String(audience_tag).trim()
+    if (notes !== undefined) contact.notes = String(notes).trim()
     contact.updated_at = new Date().toISOString()
 
     appendActivityLog({
@@ -306,6 +320,90 @@ export function registerContactRoutes(router: Router) {
     })
   })
 
+  // POST /api/contacts/bulk-delete — Marketing Lead / Administrator bulk deletion
+  router.post('/api/contacts/bulk-delete', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireMinimumRole('marketing_lead')(req, res)
+    if (!user) return
+
+    const { ids } = req.body || {}
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids array is required.' })
+      return
+    }
+
+    const idSet = new Set(ids.map(String))
+    let deletedCount = 0
+    for (let i = contactsDb.length - 1; i >= 0; i--) {
+      if (idSet.has(contactsDb[i].id)) {
+        contactsDb.splice(i, 1)
+        deletedCount++
+      }
+    }
+
+    let cancelledQueued = 0
+    for (const r of campaignRecipientsDb) {
+      if (idSet.has(r.contact_id) && r.delivery_status === 'queued') {
+        r.delivery_status = 'skipped_suppressed'
+        cancelledQueued++
+      }
+    }
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contacts.bulk_deleted',
+      entity_type: 'contact',
+      metadata: { deletedCount, cancelledQueued },
+    })
+
+    res.status(200).json({ deletedCount, cancelledQueued })
+  })
+
+  // POST /api/contacts/bulk-status — Marketing Lead / Administrator bulk status update
+  router.post('/api/contacts/bulk-status', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireMinimumRole('marketing_lead')(req, res)
+    if (!user) return
+
+    const { ids, status } = req.body || {}
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids array is required.' })
+      return
+    }
+    if (typeof status !== 'string' || !VALID_CONTACT_STATUSES.has(status as ContactStatus)) {
+      res.status(400).json({ error: 'Invalid contact status.' })
+      return
+    }
+
+    const idSet = new Set(ids.map(String))
+    const now = new Date().toISOString()
+    let updatedCount = 0
+    for (const contact of contactsDb) {
+      if (idSet.has(contact.id)) {
+        contact.status = status as ContactStatus
+        contact.updated_at = now
+        updatedCount++
+      }
+    }
+
+    let cancelledQueued = 0
+    if (status !== 'active') {
+      for (const r of campaignRecipientsDb) {
+        if (idSet.has(r.contact_id) && r.delivery_status === 'queued') {
+          r.delivery_status = 'skipped_suppressed'
+          cancelledQueued++
+        }
+      }
+    }
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contacts.bulk_status_updated',
+      entity_type: 'contact',
+      metadata: { status, updatedCount, cancelledQueued },
+    })
+
+    res.status(200).json({ updatedCount, cancelledQueued })
+  })
+
   // POST /api/contacts/import — bulk CSV ingestion with RFC-4180 parsing, deduplication, and suppression guards
   router.post('/api/contacts/import', (req: ApiRequest, res: ApiResponse) => {
     const user = requireAuth(req, res)
@@ -332,9 +430,14 @@ export function registerContactRoutes(router: Router) {
 
     const firstNameIdx = headerParts.indexOf('first_name')
     const lastNameIdx = headerParts.indexOf('last_name')
-    const orgIdx = headerParts.indexOf('organization')
+    const orgIdx =
+      headerParts.indexOf('organization') !== -1
+        ? headerParts.indexOf('organization')
+        : headerParts.indexOf('school')
+    const districtIdx = headerParts.indexOf('district')
     const roleIdx = headerParts.indexOf('job_role')
     const audienceIdx = headerParts.indexOf('audience_tag')
+    const notesIdx = headerParts.indexOf('notes')
 
     const createdContacts: ContactRecord[] = []
     const skippedDuplicates: string[] = []
@@ -365,8 +468,10 @@ export function registerContactRoutes(router: Router) {
           if (firstNameIdx !== -1 && !existing.first_name && cols[firstNameIdx]) existing.first_name = cols[firstNameIdx]
           if (lastNameIdx !== -1 && !existing.last_name && cols[lastNameIdx]) existing.last_name = cols[lastNameIdx]
           if (orgIdx !== -1 && !existing.organization && cols[orgIdx]) existing.organization = cols[orgIdx]
+          if (districtIdx !== -1 && !existing.district && cols[districtIdx]) existing.district = cols[districtIdx]
           if (roleIdx !== -1 && !existing.job_role && cols[roleIdx]) existing.job_role = cols[roleIdx]
           if (audienceIdx !== -1 && !existing.audience_tag && cols[audienceIdx]) existing.audience_tag = cols[audienceIdx]
+          if (notesIdx !== -1 && !existing.notes && cols[notesIdx]) existing.notes = cols[notesIdx]
           existing.updated_at = new Date().toISOString()
         }
 
@@ -381,10 +486,12 @@ export function registerContactRoutes(router: Router) {
         first_name: firstNameIdx !== -1 ? cols[firstNameIdx] || '' : '',
         last_name: lastNameIdx !== -1 ? cols[lastNameIdx] || '' : '',
         organization: orgIdx !== -1 ? cols[orgIdx] || '' : '',
+        district: districtIdx !== -1 ? cols[districtIdx] || '' : '',
         job_role: roleIdx !== -1 ? cols[roleIdx] || '' : '',
         audience_tag: audienceIdx !== -1 && cols[audienceIdx] ? cols[audienceIdx] : 'educators',
         status: 'active',
         unsubscribe_token: generateUnsubscribeToken(),
+        notes: notesIdx !== -1 ? cols[notesIdx] || '' : '',
         created_by: user.id,
         created_at: now,
         updated_at: now,

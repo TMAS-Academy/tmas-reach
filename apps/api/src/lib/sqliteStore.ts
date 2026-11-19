@@ -204,10 +204,13 @@ export class SqliteStore {
       first_name: row.first_name ? String(row.first_name) : '',
       last_name: row.last_name ? String(row.last_name) : '',
       organization: row.organization ? String(row.organization) : '',
+      district: row.district ? String(row.district) : '',
       job_role: row.job_role ? String(row.job_role) : '',
       audience_tag: row.audience_tag ? String(row.audience_tag) : 'educators',
       status: String(row.status) as ContactStatus,
       unsubscribe_token: String(row.unsubscribe_token),
+      notes: row.notes ? String(row.notes) : '',
+      last_contacted_at: row.last_contacted_at != null ? String(row.last_contacted_at) : undefined,
       created_by: String(row.created_by),
       created_at: String(row.created_at),
       updated_at: String(row.updated_at),
@@ -240,6 +243,7 @@ export class SqliteStore {
       batch_size: Number(row.batch_size),
       created_by: String(row.created_by),
       reviewed_by: row.reviewed_by != null ? String(row.reviewed_by) : undefined,
+      reviewed_at: row.reviewed_at != null ? String(row.reviewed_at) : undefined,
       review_notes: row.review_notes != null ? String(row.review_notes) : undefined,
       created_at: String(row.created_at),
       updated_at: String(row.updated_at),
@@ -263,6 +267,7 @@ export class SqliteStore {
       sent_at: row.sent_at != null ? String(row.sent_at) : undefined,
       delivered_at: row.delivered_at != null ? String(row.delivered_at) : undefined,
       bounced_at: row.bounced_at != null ? String(row.bounced_at) : undefined,
+      created_at: row.created_at != null ? String(row.created_at) : undefined,
     }))
 
     const surveyRows = this.db
@@ -282,6 +287,7 @@ export class SqliteStore {
         first_name: String(row.first_name),
         last_name: String(row.last_name),
         organization: String(row.organization),
+        district: row.district ? String(row.district) : '',
         job_role: String(row.job_role),
         audience_tag: String(row.audience_tag),
         grade_levels: gradeLevels,
@@ -307,6 +313,7 @@ export class SqliteStore {
       return {
         id: String(row.id),
         actor_id: row.actor_id != null ? String(row.actor_id) : null,
+        actor_name: row.actor_name != null ? String(row.actor_name) : undefined,
         action: String(row.action),
         entity_type: String(row.entity_type),
         entity_id: row.entity_id != null ? String(row.entity_id) : null,
@@ -365,9 +372,10 @@ export class SqliteStore {
 
       const insertContact = this.db.prepare(
         `INSERT INTO contacts (
-          id, email, first_name, last_name, organization, job_role,
-          audience_tag, status, unsubscribe_token, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          id, email, first_name, last_name, organization, district, job_role,
+          audience_tag, status, unsubscribe_token, notes, last_contacted_at,
+          created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       for (const c of contactsDb) {
         insertContact.run(
@@ -376,10 +384,13 @@ export class SqliteStore {
           c.first_name ?? '',
           c.last_name ?? '',
           c.organization ?? '',
+          c.district ?? '',
           c.job_role ?? '',
           c.audience_tag ?? 'educators',
           c.status,
           c.unsubscribe_token,
+          c.notes ?? '',
+          c.last_contacted_at ?? null,
           c.created_by,
           c.created_at,
           c.updated_at
@@ -407,8 +418,8 @@ export class SqliteStore {
       const insertCampaign = this.db.prepare(
         `INSERT INTO campaigns (
           id, name, template_id, target_audience_tag, status, scheduled_at,
-          batch_size, created_by, reviewed_by, review_notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          batch_size, created_by, reviewed_by, reviewed_at, review_notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       for (const cmp of campaignsDb) {
         insertCampaign.run(
@@ -421,6 +432,7 @@ export class SqliteStore {
           cmp.batch_size,
           cmp.created_by,
           cmp.reviewed_by ?? null,
+          cmp.reviewed_at ?? null,
           cmp.review_notes ?? null,
           cmp.created_at,
           cmp.updated_at
@@ -431,8 +443,8 @@ export class SqliteStore {
         `INSERT INTO campaign_recipients (
           id, campaign_id, contact_id, email, personalized_subject, personalized_body,
           delivery_status, provider_message_id, error_message, retry_count, next_retry_at,
-          sent_at, delivered_at, bounced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sent_at, delivered_at, bounced_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(campaign_id, contact_id) DO UPDATE SET
           delivery_status = excluded.delivery_status,
           provider_message_id = excluded.provider_message_id,
@@ -441,7 +453,8 @@ export class SqliteStore {
           next_retry_at = excluded.next_retry_at,
           sent_at = excluded.sent_at,
           delivered_at = excluded.delivered_at,
-          bounced_at = excluded.bounced_at`
+          bounced_at = excluded.bounced_at,
+          created_at = excluded.created_at`
       )
       for (const r of campaignRecipientsDb) {
         insertRecipient.run(
@@ -458,15 +471,16 @@ export class SqliteStore {
           r.next_retry_at ?? null,
           r.sent_at ?? null,
           r.delivered_at ?? null,
-          r.bounced_at ?? null
+          r.bounced_at ?? null,
+          r.created_at ?? null
         )
       }
 
       const insertSurvey = this.db.prepare(
         `INSERT INTO surveys (
-          id, email, first_name, last_name, organization, job_role, audience_tag,
+          id, email, first_name, last_name, organization, district, job_role, audience_tag,
           grade_levels_json, estimated_students, notes, consent_outreach, status, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       for (const s of surveysDb) {
         insertSurvey.run(
@@ -475,6 +489,7 @@ export class SqliteStore {
           s.first_name,
           s.last_name,
           s.organization,
+          s.district ?? '',
           s.job_role,
           s.audience_tag,
           JSON.stringify(s.grade_levels ?? []),
@@ -488,13 +503,14 @@ export class SqliteStore {
 
       const insertLog = this.db.prepare(
         `INSERT INTO activity_logs (
-          id, actor_id, action, entity_type, entity_id, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          id, actor_id, actor_name, action, entity_type, entity_id, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       for (const log of activityLogsDb) {
         insertLog.run(
           log.id,
           log.actor_id,
+          log.actor_name ?? null,
           log.action,
           log.entity_type,
           log.entity_id ?? null,

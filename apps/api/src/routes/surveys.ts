@@ -15,6 +15,7 @@ export interface SurveyRecord {
   first_name: string
   last_name: string
   organization: string
+  district?: string
   job_role: string
   audience_tag: string
   grade_levels?: string[]
@@ -37,6 +38,7 @@ export function registerSurveyRoutes(router: Router) {
       first_name,
       last_name,
       organization,
+      district,
       job_role,
       audience_tag,
       grade_levels,
@@ -82,6 +84,7 @@ export function registerSurveyRoutes(router: Router) {
       first_name: first_name.trim(),
       last_name: last_name.trim(),
       organization: organization.trim(),
+      district: typeof district === 'string' ? district.trim() : '',
       job_role: job_role.trim(),
       audience_tag: audience_tag.trim(),
       grade_levels: Array.isArray(grade_levels) ? grade_levels.map(String) : [],
@@ -151,6 +154,7 @@ export function registerSurveyRoutes(router: Router) {
       first_name: survey.first_name,
       last_name: survey.last_name,
       organization: survey.organization,
+      district: survey.district || '',
       job_role: survey.job_role,
       audience_tag: survey.audience_tag,
       status: 'active',
@@ -176,5 +180,32 @@ export function registerSurveyRoutes(router: Router) {
       contact: newContact,
       survey,
     })
+  })
+
+  // POST /api/surveys/:id/archive — Archive a pending review submission
+  router.post('/api/surveys/:id/archive', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireAuth(req, res)
+    if (!user) return
+
+    const survey = surveysDb.find((s) => s.id === req.params.id)
+    if (!survey) {
+      res.status(404).json({ error: 'Survey submission not found.' })
+      return
+    }
+
+    if (survey.status !== 'pending_review') {
+      res.status(400).json({ error: `Survey submission is already in status "${survey.status}".` })
+      return
+    }
+
+    survey.status = 'archived'
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'survey.archived',
+      entity_type: 'survey',
+      entity_id: survey.id,
+    })
+
+    res.status(200).json({ success: true, survey })
   })
 }
