@@ -1,8 +1,17 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { store } from './lib/store'
+import { useAppStore } from './lib/useAppStore'
 import type { UserRole } from './types'
 import { Navbar, type TabKey } from './components/layout/Navbar'
-import { ToastContainer, type ToastMessage } from './components/ui/Toast'
+import {
+  ToastContainer,
+  MAX_VISIBLE_TOASTS,
+  type ToastMessage,
+  type ToastType,
+} from './components/ui/Toast'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { ConfirmDialog } from './components/ui/ConfirmDialog'
+import { CommandPalette } from './components/ui/CommandPalette'
 import { ContactList } from './components/contacts/ContactList'
 import { TemplateList } from './components/templates/TemplateList'
 import { CampaignList } from './components/campaigns/CampaignList'
@@ -11,19 +20,59 @@ import { ActivityLogs } from './components/analytics/ActivityLogs'
 import { UserManagement } from './components/admin/UserManagement'
 import { UnsubscribePortal } from './components/unsubscribe/UnsubscribePortal'
 import { SurveyHub } from './components/survey/SurveyHub'
+import { AlertTriangle, X } from 'lucide-react'
 import './App.css'
 
+const VALID_TABS = new Set<TabKey>([
+  'contacts',
+  'intake',
+  'templates',
+  'campaigns',
+  'analytics',
+  'logs',
+  'admin',
+  'unsubscribe',
+])
+
+function readTabFromUrl(): TabKey {
+  try {
+    const param = new URLSearchParams(window.location.search).get('tab') as TabKey | null
+    if (param && VALID_TABS.has(param)) {
+      return param
+    }
+  } catch {
+    // Ignore malformed URLs
+  }
+  return 'contacts'
+}
+
 export default function App() {
-  const [, setTick] = useState(0)
+  const snapshot = useAppStore()
+  const { currentUser, contacts, templates, campaigns, logs, users, surveys, storageError } =
+    snapshot
+
   const [toasts, setToasts] = useState<ToastMessage[]>([])
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    const params = new URLSearchParams(window.location.search)
-    const tabParam = params.get('tab') as TabKey | null
-    return tabParam || 'contacts'
+  const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showPalette, setShowPalette] = useState(false)
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      const urlTheme = new URLSearchParams(window.location.search).get('theme')
+      if (urlTheme === 'dark') return true
+      if (urlTheme === 'light') return false
+      const stored = localStorage.getItem('tmas_theme')
+      if (stored === 'light') return false
+      return true
+    } catch {
+      return true
+    }
   })
 
-  const addToast = useCallback((type: 'success' | 'error' | 'info', text: string) => {
-    setToasts((prev) => [...prev, { id: `toast-${Date.now()}-${Math.random()}`, type, text }])
+  const addToast = useCallback((type: ToastType, text: string) => {
+    setToasts((prev) => [
+      ...prev.slice(-(MAX_VISIBLE_TOASTS - 1)),
+      { id: `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type, text },
+    ])
   }, [])
 
   const removeToast = useCallback((id: string) => {
@@ -31,40 +80,106 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = store.subscribe(() => {
-      setTick((t) => t + 1)
+    try {
+      if (isDark) {
+        document.documentElement.classList.add('dark')
+        localStorage.setItem('tmas_theme', 'dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+        localStorage.setItem('tmas_theme', 'light')
+      }
+    } catch {
+      // Storage unavailable
+    }
+  }, [isDark])
+
+  useEffect(() => {
+    const unsubStorage = store.subscribeStorageError((msg) => {
+      addToast('error', msg)
     })
-    return () => unsubscribe()
+    return () => unsubStorage()
+  }, [addToast])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('tab') !== activeTab) {
+      url.searchParams.set('tab', activeTab)
+      if (activeTab !== 'unsubscribe') {
+        url.searchParams.delete('token')
+      }
+      window.history.replaceState(null, '', url.toString())
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    const onPopState = () => {
+      setActiveTab(readTabFromUrl())
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const currentUser = store.getCurrentUser()
-  const contacts = store.getContacts()
-  const templates = store.getTemplates()
-  const campaigns = store.getCampaigns()
-  const logs = store.getLogs()
-  const users = store.getUsers()
-  const surveys = store.getSurveys()
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setShowPalette((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const pendingApprovalsCount = useMemo(
+    () => campaigns.filter((c) => c.status === 'pending_approval').length,
+    [campaigns]
+  )
+  const pendingSurveysCount = useMemo(
+    () => surveys.filter((s) => s.status === 'pending_review').length,
+    [surveys]
+  )
+
+  const handleSelectTab = useCallback(
+    (tab: TabKey) => {
+      if (tab === 'admin' && currentUser.role !== 'administrator') {
+        addToast('error', 'Administrator role is required to access Team & RBAC.')
+        return
+      }
+      setActiveTab(tab)
+    },
+    [currentUser.role, addToast]
+  )
 
   const handleRoleChange = (role: UserRole) => {
     store.setCurrentRole(role)
-    addToast('info', `Active role switched to ${role}`)
+    addToast('info', `Active role switched to ${role.replace('_', ' ')}`)
     if (role !== 'administrator' && activeTab === 'admin') {
       setActiveTab('contacts')
     }
   }
 
+  const handleResetConfirmed = () => {
+    store.resetToDefault()
+    setShowResetConfirm(false)
+    addToast('info', 'Demo data restored to defaults')
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative selection:bg-amber-400 selection:text-black">
-      {/* Subtle ambient lighting mesh */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative selection:bg-amber-400 selection:text-slate-950">
       <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-radial from-amber-400/5 via-indigo-500/5 to-transparent blur-3xl dark:from-amber-400/8 dark:via-indigo-500/5"></div>
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-radial from-amber-400/5 via-slate-500/5 to-transparent blur-3xl dark:from-amber-400/8 dark:via-slate-500/5" />
       </div>
 
       <Navbar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         currentUser={currentUser}
         users={users}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark((d) => !d)}
+        onOpenCommandPalette={() => setShowPalette(true)}
+        pendingApprovalsCount={pendingApprovalsCount}
+        pendingSurveysCount={pendingSurveysCount}
         onSelectUser={(userId) => {
           store.setCurrentUser(userId)
           const target = users.find((u) => u.id === userId)
@@ -78,67 +193,121 @@ export default function App() {
         onRoleChange={handleRoleChange}
       />
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
-        {activeTab === 'contacts' && (
-          <ContactList
-            contacts={contacts}
-            campaigns={campaigns}
-            userRole={currentUser.role}
-          />
-        )}
+      {storageError && (
+        <div
+          role="alert"
+          className="border-b border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 dark:border-amber-800/70 dark:bg-amber-950/50 dark:text-amber-200"
+        >
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>{storageError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => store.clearStorageError()}
+              aria-label="Dismiss storage warning"
+              className="rounded p-1 hover:bg-amber-200/60 dark:hover:bg-amber-900/60"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
-        {activeTab === 'intake' && (
-          <SurveyHub surveys={surveys} onToast={addToast} />
-        )}
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-7">
+        <ErrorBoundary
+          scope="Current View"
+          resetKey={activeTab}
+          onResetData={() => {
+            store.resetToDefault()
+            addToast('info', 'Local data reset to defaults')
+          }}
+        >
+          {activeTab === 'contacts' && (
+            <ContactList
+              contacts={contacts}
+              campaigns={campaigns}
+              userRole={currentUser.role}
+            />
+          )}
 
-        {activeTab === 'templates' && <TemplateList templates={templates} />}
+          {activeTab === 'intake' && <SurveyHub surveys={surveys} onToast={addToast} />}
 
-        {activeTab === 'campaigns' && (
-          <CampaignList
-            campaigns={campaigns}
-            templates={templates}
-            contacts={contacts}
-            userRole={currentUser.role}
-          />
-        )}
+          {activeTab === 'templates' && <TemplateList templates={templates} />}
 
-        {activeTab === 'analytics' && (
-          <AnalyticsDashboard
-            contacts={contacts}
-            campaigns={campaigns}
-            userRole={currentUser.role}
-          />
-        )}
+          {activeTab === 'campaigns' && (
+            <CampaignList
+              campaigns={campaigns}
+              templates={templates}
+              contacts={contacts}
+              userRole={currentUser.role}
+            />
+          )}
 
-        {activeTab === 'logs' && <ActivityLogs logs={logs} />}
+          {activeTab === 'analytics' && (
+            <AnalyticsDashboard
+              contacts={contacts}
+              campaigns={campaigns}
+              userRole={currentUser.role}
+            />
+          )}
 
-        {activeTab === 'admin' && currentUser.role === 'administrator' && (
-          <UserManagement users={users} onToast={addToast} />
-        )}
+          {activeTab === 'logs' && <ActivityLogs logs={logs} />}
 
-        {activeTab === 'unsubscribe' && (
-          <UnsubscribePortal
-            contacts={contacts}
-            onBack={() => setActiveTab('contacts')}
-          />
-        )}
+          {activeTab === 'admin' && currentUser.role === 'administrator' && (
+            <UserManagement users={users} onToast={addToast} />
+          )}
+
+          {activeTab === 'unsubscribe' && (
+            <UnsubscribePortal
+              contacts={contacts}
+              onBack={() => setActiveTab('contacts')}
+            />
+          )}
+        </ErrorBoundary>
       </main>
 
-      <footer className="border-t border-slate-200/80 bg-white/50 py-3 text-xs text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/50">
-        <div className="mx-auto max-w-7xl px-4 flex items-center justify-between">
-          <span>TMAS Academy</span>
+      <footer className="border-t border-slate-200/80 bg-white/60 py-3 text-xs text-slate-600 dark:border-slate-800/80 dark:bg-slate-900/60 dark:text-slate-400">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4">
+          <span>
+            TMAS Reach · Signed in as{' '}
+            <strong className="font-medium text-slate-800 dark:text-slate-200">
+              {currentUser.full_name}
+            </strong>
+          </span>
           <button
             type="button"
-            onClick={() => {
-              store.resetToDefault()
-              addToast('info', 'Demo data reset')
-            }}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
+            onClick={() => setShowResetConfirm(true)}
+            className="text-slate-600 underline hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 rounded"
           >
             Reset demo data
           </button>
         </div>
       </footer>
+
+      <CommandPalette
+        isOpen={showPalette}
+        onClose={() => setShowPalette(false)}
+        onSelectTab={handleSelectTab}
+        isAdmin={currentUser.role === 'administrator'}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark((d) => !d)}
+        onRequestReset={() => setShowResetConfirm(true)}
+        contacts={contacts}
+        templates={templates}
+        campaigns={campaigns}
+      />
+
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        title="Reset local workspace data?"
+        message="This will clear added contacts, campaigns, intake submissions, and custom templates, restoring the default seed state."
+        confirmLabel="Reset data"
+        tone="warning"
+        onConfirm={handleResetConfirmed}
+        onCancel={() => setShowResetConfirm(false)}
+      />
 
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
