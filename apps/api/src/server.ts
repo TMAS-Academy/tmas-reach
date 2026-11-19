@@ -5,8 +5,10 @@ import path from 'node:path'
 import { pathToFileURL, URL } from 'node:url'
 import { getConfig, type ApiConfig } from './lib/config.js'
 import { createLogger, type Logger } from './lib/logger.js'
+import { closePersistence, initPersistence, syncPersistence } from './lib/sqliteStore.js'
 import { registerContactRoutes } from './routes/contacts.js'
 import { registerCampaignRoutes } from './routes/campaigns.js'
+import { registerLogRoutes } from './routes/logs.js'
 import { registerSurveyRoutes } from './routes/surveys.js'
 import { registerUnsubscribeRoutes } from './routes/unsubscribe.js'
 import { registerWebhookRoutes } from './routes/webhooks.js'
@@ -354,6 +356,12 @@ export function createServerApp(router: Router, options: ServerAppOptions = {}) 
 
     try {
       await match.route.handler(apiReq, apiRes)
+      if (
+        res.statusCode < 500 &&
+        (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT' || req.method === 'DELETE')
+      ) {
+        syncPersistence()
+      }
     } catch (err: any) {
       logger.error('unhandled_route_error', {
         requestId,
@@ -386,6 +394,7 @@ export function buildDefaultRouter(): Router {
   registerSurveyRoutes(router)
   registerUnsubscribeRoutes(router)
   registerWebhookRoutes(router)
+  registerLogRoutes(router)
 
   return router
 }
@@ -483,6 +492,11 @@ export function createManagedServer(portOrOptions?: number | StartServerOptions)
   const logger = opts.logger ?? createLogger({ level: config.logLevel })
   const router = opts.router ?? buildDefaultRouter()
 
+  if (config.sqliteDbPath) {
+    initPersistence(config.sqliteDbPath)
+    logger.info('sqlite_persistence_initialized', { dbPath: config.sqliteDbPath })
+  }
+
   let shutdownController: GracefulShutdownController | null = null
   const app = createServerApp(router, {
     config,
@@ -498,7 +512,10 @@ export function createManagedServer(portOrOptions?: number | StartServerOptions)
   shutdownController = createGracefulShutdown(server, {
     logger,
     timeoutMs: opts.shutdownTimeoutMs,
-    onShutdown: opts.onShutdown,
+    onShutdown: async () => {
+      await opts.onShutdown?.()
+      closePersistence()
+    },
   })
 
   server.listen(listenPort, () => {
