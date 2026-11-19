@@ -260,7 +260,11 @@ export default function App() {
           {activeTab === 'logs' && <ActivityLogs logs={logs} />}
 
           {activeTab === 'admin' && currentUser.role === 'administrator' && (
-            <UserManagement users={users} onToast={addToast} />
+            <UserManagement
+              users={users}
+              currentUserId={currentUser.id}
+              onToast={addToast}
+            />
           )}
 
           {activeTab === 'unsubscribe' && (
