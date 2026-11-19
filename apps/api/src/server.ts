@@ -1,6 +1,10 @@
-import http from 'http'
-import type { IncomingMessage, ServerResponse } from 'http'
-import { URL } from 'url'
+import crypto from 'node:crypto'
+import http from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import path from 'node:path'
+import { pathToFileURL, URL } from 'node:url'
+import { getConfig, type ApiConfig } from './lib/config.js'
+import { createLogger, type Logger } from './lib/logger.js'
 import { registerContactRoutes } from './routes/contacts.js'
 import { registerCampaignRoutes } from './routes/campaigns.js'
 import { registerSurveyRoutes } from './routes/surveys.js'
@@ -17,6 +21,9 @@ export interface ApiRequest {
   params: Record<string, string>
   headers: Record<string, string | string[] | undefined>
   body: any
+  rawBody?: Buffer
+  rawBodyText?: string
+  requestId?: string
   user?: {
     id: string
     email: string
@@ -43,6 +50,22 @@ export interface Route {
   handler: RouteHandler
 }
 
+export class BadRequestError extends Error {
+  public readonly statusCode = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'BadRequestError'
+  }
+}
+
+class PayloadTooLargeError extends Error {
+  public readonly statusCode = 413
+  constructor(limitBytes: number) {
+    super(`Request body exceeds limit of ${limitBytes} bytes`)
+    this.name = 'PayloadTooLargeError'
+  }
+}
+
 export class Router {
   private routes: Route[] = []
 
@@ -61,20 +84,20 @@ export class Router {
     })
   }
 
-  public get(path: string, handler: RouteHandler) {
-    this.add('GET', path, handler)
+  public get(pathPattern: string, handler: RouteHandler) {
+    this.add('GET', pathPattern, handler)
   }
 
-  public post(path: string, handler: RouteHandler) {
-    this.add('POST', path, handler)
+  public post(pathPattern: string, handler: RouteHandler) {
+    this.add('POST', pathPattern, handler)
   }
 
-  public patch(path: string, handler: RouteHandler) {
-    this.add('PATCH', path, handler)
+  public patch(pathPattern: string, handler: RouteHandler) {
+    this.add('PATCH', pathPattern, handler)
   }
 
-  public delete(path: string, handler: RouteHandler) {
-    this.add('DELETE', path, handler)
+  public delete(pathPattern: string, handler: RouteHandler) {
+    this.add('DELETE', pathPattern, handler)
   }
 
   public match(method: string, pathname: string): { route: Route; params: Record<string, string> } | null {
@@ -83,9 +106,14 @@ export class Router {
         const match = pathname.match(route.pattern)
         if (match) {
           const params: Record<string, string> = {}
-          route.paramNames.forEach((name, i) => {
-            params[name] = decodeURIComponent(match[i + 1])
-          })
+          for (let i = 0; i < route.paramNames.length; i++) {
+            const name = route.paramNames[i]
+            try {
+              params[name] = decodeURIComponent(match[i + 1])
+            } catch {
+              throw new BadRequestError(`Malformed URI component for parameter "${name}"`)
+            }
+          }
           return { route, params }
         }
       }
@@ -94,12 +122,111 @@ export class Router {
   }
 }
 
-export function createServerApp(router: Router) {
+export interface ServerAppOptions {
+  config?: Partial<ApiConfig>
+  logger?: Logger
+  isShuttingDown?: () => boolean
+}
+
+function resolveCorsOrigin(corsOriginConfig: string, requestOrigin?: string): string | null {
+  if (corsOriginConfig === '*') return '*'
+  const allowed = corsOriginConfig
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+
+  if (allowed.length === 0) return null
+  if (requestOrigin && allowed.includes(requestOrigin)) return requestOrigin
+  if (!requestOrigin && allowed.length === 1) return allowed[0]
+  return null
+}
+
+function resolveRequestId(headerValue: string | string[] | undefined): string {
+  const candidate = Array.isArray(headerValue) ? headerValue[0] : headerValue
+  const trimmed = candidate?.trim()
+  if (trimmed && trimmed.length <= 128 && /^[a-zA-Z0-9._:-]+$/.test(trimmed)) {
+    return trimmed
+  }
+  return crypto.randomUUID()
+}
+
+function readRequestBody(req: IncomingMessage, limitBytes: number): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let totalBytes = 0
+    let exceeded = false
+
+    const onData = (chunk: Buffer | string) => {
+      if (exceeded) return
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      totalBytes += buf.length
+      if (totalBytes > limitBytes) {
+        exceeded = true
+        req.removeListener('data', onData)
+        req.removeListener('end', onEnd)
+        // Drain remaining bytes so the client reliably receives the 413 response
+        req.resume()
+        reject(new PayloadTooLargeError(limitBytes))
+        return
+      }
+      chunks.push(buf)
+    }
+
+    const onEnd = () => {
+      if (!exceeded) resolve(Buffer.concat(chunks, totalBytes))
+    }
+
+    const onError = (err: Error) => {
+      if (!exceeded) reject(err)
+    }
+
+    req.on('data', onData)
+    req.on('end', onEnd)
+    req.on('error', onError)
+  })
+}
+
+export function createServerApp(router: Router, options: ServerAppOptions = {}) {
+  const baseConfig = getConfig()
+  const effectiveConfig: ApiConfig = { ...baseConfig, ...options.config }
+  const logger = options.logger ?? createLogger({ level: effectiveConfig.logLevel })
+
   return async (req: IncomingMessage, res: ServerResponse) => {
-    // Enable CORS
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    const startNs = process.hrtime.bigint()
+    const requestId = resolveRequestId(req.headers['x-request-id'])
+
+    res.setHeader('X-Request-Id', requestId)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Referrer-Policy', 'no-referrer')
+    res.setHeader('Cache-Control', 'no-store')
+
+    const reqOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
+    const allowedOrigin = resolveCorsOrigin(effectiveConfig.corsOrigin, reqOrigin)
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+      if (allowedOrigin !== '*') {
+        res.setHeader('Vary', 'Origin')
+      }
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-role, x-user-id')
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, x-user-role, x-user-id, x-user-email, x-request-id'
+    )
+    res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id')
+
+    let pathname = req.url || '/'
+    res.on('finish', () => {
+      const durationMs = Number(process.hrtime.bigint() - startNs) / 1_000_000
+      logger.info('http_request', {
+        requestId,
+        method: req.method || 'GET',
+        path: pathname,
+        status: res.statusCode,
+        durationMs: Math.round(durationMs * 100) / 100,
+      })
+    })
 
     if (req.method === 'OPTIONS') {
       res.statusCode = 204
@@ -107,42 +234,67 @@ export function createServerApp(router: Router) {
       return
     }
 
-    const host = req.headers.host || 'localhost'
-    const fullUrl = new URL(req.url || '/', `http://${host}`)
-    const pathname = fullUrl.pathname
+    let fullUrl: URL
+    try {
+      const host = req.headers.host || 'localhost'
+      fullUrl = new URL(req.url || '/', `http://${host}`)
+    } catch {
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'Invalid request URL' }))
+      return
+    }
+
+    pathname = fullUrl.pathname
     const query: Record<string, string> = {}
     fullUrl.searchParams.forEach((value: string, key: string) => {
       query[key] = value
     })
 
-    // Read body
-    let rawBody = ''
+    if (req.method === 'GET' && pathname === '/api/ready') {
+      const shuttingDown = options.isShuttingDown?.() ?? false
+      res.statusCode = shuttingDown ? 503 : 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(
+        JSON.stringify({
+          status: shuttingDown ? 'shutting_down' : 'ready',
+          service: 'tmas-reach-api',
+          uptimeSec: Math.floor(process.uptime()),
+          timestamp: new Date().toISOString(),
+        })
+      )
+      return
+    }
+
+    let rawBody: Buffer
     try {
-      rawBody = await new Promise<string>((resolve, reject) => {
-        let chunks = ''
-        req.on('data', (c: any) => (chunks += c))
-        req.on('end', () => resolve(chunks))
-        req.on('error', reject)
-      })
-    } catch {
+      rawBody = await readRequestBody(req, effectiveConfig.bodyLimitBytes)
+    } catch (err) {
+      if (err instanceof PayloadTooLargeError) {
+        res.statusCode = 413
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: 'Payload too large', limitBytes: effectiveConfig.bodyLimitBytes }))
+        return
+      }
       res.statusCode = 400
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: 'Failed to read request body' }))
       return
     }
 
+    const rawBodyText = rawBody.toString('utf8')
     let parsedBody: any = null
-    if (rawBody && req.headers['content-type']?.includes('application/json')) {
+    if (rawBodyText && req.headers['content-type']?.includes('application/json')) {
       try {
-        parsedBody = JSON.parse(rawBody)
+        parsedBody = JSON.parse(rawBodyText)
       } catch {
         res.statusCode = 400
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify({ error: 'Invalid JSON payload' }))
         return
       }
-    } else if (rawBody) {
-      parsedBody = rawBody
+    } else if (rawBodyText) {
+      parsedBody = rawBodyText
     }
 
     const apiRes: ApiResponse = {
@@ -167,7 +319,19 @@ export function createServerApp(router: Router) {
       },
     }
 
-    const match = router.match(req.method || 'GET', pathname)
+    let match: { route: Route; params: Record<string, string> } | null
+    try {
+      match = router.match(req.method || 'GET', pathname)
+    } catch (err) {
+      if (err instanceof BadRequestError) {
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: err.message }))
+        return
+      }
+      throw err
+    }
+
     if (!match) {
       res.statusCode = 404
       res.setHeader('Content-Type', 'application/json')
@@ -183,16 +347,24 @@ export function createServerApp(router: Router) {
       params: match.params,
       headers: req.headers,
       body: parsedBody,
+      rawBody,
+      rawBodyText,
+      requestId,
     }
 
     try {
       await match.route.handler(apiReq, apiRes)
     } catch (err: any) {
-      console.error('Unhandled server error:', err)
+      logger.error('unhandled_route_error', {
+        requestId,
+        method: req.method,
+        path: pathname,
+        error: err instanceof Error ? err.message : String(err),
+      })
       if (!res.writableEnded) {
         res.statusCode = 500
         res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ error: 'Internal Server Error', message: err.message }))
+        res.end(JSON.stringify({ error: 'Internal Server Error', requestId }))
       }
     }
   }
@@ -218,14 +390,155 @@ export function buildDefaultRouter(): Router {
   return router
 }
 
-export function startServer(port = 4000) {
-  const router = buildDefaultRouter()
-  const app = createServerApp(router)
-  const server = http.createServer(app)
+export interface StartServerOptions {
+  port?: number
+  config?: Partial<ApiConfig>
+  logger?: Logger
+  router?: Router
+  shutdownTimeoutMs?: number
+  onShutdown?: () => Promise<void> | void
+}
 
-  server.listen(port, () => {
-    console.log(`TMAS Reach API listening on port ${port}`)
+export interface GracefulShutdownController {
+  isShuttingDown: () => boolean
+  shutdown: (signal?: string) => Promise<void>
+}
+
+export function createGracefulShutdown(
+  server: http.Server,
+  options: {
+    logger?: Logger
+    timeoutMs?: number
+    onShutdown?: () => Promise<void> | void
+  } = {}
+): GracefulShutdownController {
+  let shuttingDown = false
+  let shutdownPromise: Promise<void> | null = null
+  const timeoutMs = options.timeoutMs ?? 10_000
+
+  const shutdown = (signal = 'MANUAL'): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise
+    shuttingDown = true
+    options.logger?.info('server_shutdown_started', { signal })
+
+    shutdownPromise = new Promise<void>((resolve) => {
+      const failsafe = setTimeout(() => {
+        options.logger?.warn('server_shutdown_forced', { signal, timeoutMs })
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections()
+        }
+        resolve()
+      }, timeoutMs)
+      failsafe.unref()
+
+      const finish = async () => {
+        try {
+          await options.onShutdown?.()
+        } catch (err) {
+          options.logger?.error('server_shutdown_hook_error', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        } finally {
+          clearTimeout(failsafe)
+          options.logger?.info('server_shutdown_complete', { signal })
+          resolve()
+        }
+      }
+
+      if (!server.listening) {
+        void finish()
+        return
+      }
+
+      server.close(() => {
+        void finish()
+      })
+
+      if (typeof server.closeIdleConnections === 'function') {
+        server.closeIdleConnections()
+      }
+    })
+
+    return shutdownPromise
+  }
+
+  return {
+    isShuttingDown: () => shuttingDown,
+    shutdown,
+  }
+}
+
+export interface ManagedServer {
+  server: http.Server
+  shutdown: (signal?: string) => Promise<void>
+  isShuttingDown: () => boolean
+}
+
+export function createManagedServer(portOrOptions?: number | StartServerOptions): ManagedServer {
+  const opts: StartServerOptions =
+    typeof portOrOptions === 'number' ? { port: portOrOptions } : portOrOptions ?? {}
+
+  const config = { ...getConfig(), ...opts.config }
+  const listenPort = opts.port ?? config.port
+  const logger = opts.logger ?? createLogger({ level: config.logLevel })
+  const router = opts.router ?? buildDefaultRouter()
+
+  let shutdownController: GracefulShutdownController | null = null
+  const app = createServerApp(router, {
+    config,
+    logger,
+    isShuttingDown: () => shutdownController?.isShuttingDown() ?? false,
   })
 
-  return server
+  const server = http.createServer(app)
+  server.keepAliveTimeout = 65_000
+  server.headersTimeout = 66_000
+  server.requestTimeout = 30_000
+
+  shutdownController = createGracefulShutdown(server, {
+    logger,
+    timeoutMs: opts.shutdownTimeoutMs,
+    onShutdown: opts.onShutdown,
+  })
+
+  server.listen(listenPort, () => {
+    const addr = server.address()
+    const boundPort = typeof addr === 'object' && addr ? addr.port : listenPort
+    logger.info('server_listening', { port: boundPort, env: config.nodeEnv })
+  })
+
+  return {
+    server,
+    shutdown: shutdownController.shutdown,
+    isShuttingDown: shutdownController.isShuttingDown,
+  }
+}
+
+export function startServer(portOrOptions?: number | StartServerOptions): http.Server {
+  return createManagedServer(portOrOptions).server
+}
+
+function isDirectEntrypoint(): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return pathToFileURL(path.resolve(entry)).href === import.meta.url
+  } catch {
+    return false
+  }
+}
+
+if (isDirectEntrypoint()) {
+  const config = getConfig()
+  const logger = createLogger({ level: config.logLevel })
+  const managed = createManagedServer({ config, logger })
+
+  const handleSignal = (signal: NodeJS.Signals) => {
+    void managed.shutdown(signal).then(() => {
+      process.exit(0)
+    })
+  }
+
+  process.once('SIGTERM', handleSignal)
+  process.once('SIGINT', handleSignal)
 }
