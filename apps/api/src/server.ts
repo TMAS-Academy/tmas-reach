@@ -12,6 +12,7 @@ import { registerLogRoutes } from './routes/logs.js'
 import { registerSurveyRoutes } from './routes/surveys.js'
 import { registerUnsubscribeRoutes } from './routes/unsubscribe.js'
 import { registerWebhookRoutes } from './routes/webhooks.js'
+import { registerAuthRoutes, seedBootstrapAdminFromConfig } from './routes/auth.js'
 import { startBatchSchedulerLoop, stopBatchSchedulerLoop } from './services/batchScheduler.js'
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'OPTIONS'
@@ -31,6 +32,7 @@ export interface ApiRequest {
     id: string
     email: string
     role: 'marketing_intern' | 'marketing_lead' | 'administrator'
+    full_name?: string
   }
 }
 
@@ -390,6 +392,7 @@ export function buildDefaultRouter(): Router {
     })
   })
 
+  registerAuthRoutes(router)
   registerContactRoutes(router)
   registerCampaignRoutes(router)
   registerSurveyRoutes(router)
@@ -497,6 +500,11 @@ export function createManagedServer(portOrOptions?: number | StartServerOptions)
   if (config.sqliteDbPath) {
     initPersistence(config.sqliteDbPath)
     logger.info('sqlite_persistence_initialized', { dbPath: config.sqliteDbPath })
+  }
+
+  if (seedBootstrapAdminFromConfig(config)) {
+    syncPersistence()
+    logger.info('bootstrap_admin_seeded', { email: config.bootstrapAdminEmail })
   }
 
   const shouldStartScheduler =

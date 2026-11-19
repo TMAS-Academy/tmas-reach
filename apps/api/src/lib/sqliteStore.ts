@@ -13,8 +13,11 @@ import {
 } from '../routes/campaigns.js'
 import { surveysDb, type SurveyRecord } from '../routes/surveys.js'
 import { activityLogsDb, type ActivityLogRecord } from '../routes/logs.js'
+import { usersDb, type UserRecord } from '../routes/auth.js'
+import type { UserRole } from '../middleware/rbac.js'
 
 export interface PersistenceSnapshot {
+  users: UserRecord[]
   contacts: ContactRecord[]
   templates: EmailTemplateRecord[]
   campaigns: CampaignRecord[]
@@ -24,6 +27,19 @@ export interface PersistenceSnapshot {
 }
 
 const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'marketing_intern',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -139,6 +155,24 @@ export class SqliteStore {
     this.db.exec('PRAGMA synchronous = NORMAL;')
     this.db.exec('PRAGMA foreign_keys = ON;')
     this.db.exec(SCHEMA_SQL)
+    this.runColumnMigrations()
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.prepare(`PRAGMA table_info(${table});`).all() as Array<{ name?: string }>
+    if (!columns.some((col) => col.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`)
+    }
+  }
+
+  private runColumnMigrations(): void {
+    this.ensureColumn('contacts', 'district', 'TEXT')
+    this.ensureColumn('contacts', 'notes', 'TEXT')
+    this.ensureColumn('contacts', 'last_contacted_at', 'TEXT')
+    this.ensureColumn('surveys', 'district', 'TEXT')
+    this.ensureColumn('campaigns', 'reviewed_at', 'TEXT')
+    this.ensureColumn('campaign_recipients', 'created_at', 'TEXT')
+    this.ensureColumn('activity_logs', 'actor_name', 'TEXT')
   }
 
   public getJournalMode(): string {
@@ -147,6 +181,20 @@ export class SqliteStore {
   }
 
   public loadSnapshot(): PersistenceSnapshot {
+    const userRows = this.db
+      .prepare('SELECT * FROM users ORDER BY created_at ASC')
+      .all() as Array<Record<string, unknown>>
+    const users: UserRecord[] = userRows.map((row) => ({
+      id: String(row.id),
+      email: String(row.email),
+      full_name: String(row.full_name),
+      role: String(row.role) as UserRole,
+      is_active: Boolean(row.is_active),
+      password_hash: String(row.password_hash),
+      created_at: String(row.created_at),
+      updated_at: String(row.updated_at),
+    }))
+
     const contactRows = this.db
       .prepare('SELECT * FROM contacts ORDER BY created_at DESC')
       .all() as Array<Record<string, unknown>>
@@ -267,12 +315,13 @@ export class SqliteStore {
       }
     })
 
-    return { contacts, templates, campaigns, recipients, surveys, activityLogs }
+    return { users, contacts, templates, campaigns, recipients, surveys, activityLogs }
   }
 
   public hydrateInMemoryStores(): void {
     const snap = this.loadSnapshot()
 
+    usersDb.splice(0, usersDb.length, ...snap.users)
     contactsDb.splice(0, contactsDb.length, ...snap.contacts)
     if (snap.templates.length > 0) {
       templatesDb.splice(0, templatesDb.length, ...snap.templates)
@@ -294,6 +343,25 @@ export class SqliteStore {
       this.db.exec('DELETE FROM contacts')
       this.db.exec('DELETE FROM surveys')
       this.db.exec('DELETE FROM activity_logs')
+      this.db.exec('DELETE FROM users')
+
+      const insertUser = this.db.prepare(
+        `INSERT INTO users (
+          id, email, full_name, role, is_active, password_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      for (const u of usersDb) {
+        insertUser.run(
+          u.id,
+          u.email,
+          u.full_name,
+          u.role,
+          u.is_active ? 1 : 0,
+          u.password_hash,
+          u.created_at,
+          u.updated_at
+        )
+      }
 
       const insertContact = this.db.prepare(
         `INSERT INTO contacts (

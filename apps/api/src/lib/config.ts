@@ -5,6 +5,12 @@ export interface ApiConfig {
   nodeEnv: string
   corsOrigin: string
   appPublicUrl: string
+  authSecret: string
+  authTokenTtlSec: number
+  allowDevAuth: boolean
+  bootstrapAdminEmail?: string
+  bootstrapAdminPassword?: string
+  bootstrapAdminName: string
   webhookSigningSecret: string
   resendApiKey?: string
   emailFromAddress: string
@@ -49,6 +55,14 @@ function parseLogLevel(raw: string | undefined, nodeEnv: string): LogLevel {
   return nodeEnv === 'test' ? 'silent' : 'info'
 }
 
+function parseAllowDevAuth(raw: string | undefined, nodeEnv: string): boolean {
+  if (nodeEnv.toLowerCase() === 'production') return false
+  const normalized = (raw || '').trim().toLowerCase()
+  if (normalized === 'false' || normalized === '0') return false
+  if (normalized === 'true' || normalized === '1') return true
+  return nodeEnv.toLowerCase() === 'test'
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const nodeEnv = (env.NODE_ENV || 'development').trim() || 'development'
   const webhookSecret =
@@ -58,12 +72,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
 
   const resendApiKey = env.RESEND_API_KEY?.trim() || undefined
   const sqliteDbPath = env.SQLITE_DB_PATH?.trim() || undefined
+  const authSecret = env.AUTH_SECRET?.trim() || 'dev_insecure_auth_secret_change_me'
+  const bootstrapAdminEmail = env.ADMIN_EMAIL?.trim().toLowerCase() || undefined
+  const bootstrapAdminPassword = env.ADMIN_PASSWORD?.trim() || undefined
+  const bootstrapAdminName = env.ADMIN_NAME?.trim() || 'Administrator'
 
   return {
     port: parseNonNegativeInt(env.PORT, 4000, 65535),
     nodeEnv,
     corsOrigin: env.CORS_ORIGIN?.trim() || '*',
     appPublicUrl: normalizeUrl(env.APP_PUBLIC_URL, 'http://localhost:5173'),
+    authSecret,
+    authTokenTtlSec: parsePositiveInt(env.AUTH_TOKEN_TTL_SEC, 43_200, 2_592_000),
+    allowDevAuth: parseAllowDevAuth(env.ALLOW_DEV_AUTH, nodeEnv),
+    bootstrapAdminEmail,
+    bootstrapAdminPassword,
+    bootstrapAdminName,
     webhookSigningSecret: webhookSecret,
     resendApiKey,
     emailFromAddress: env.EMAIL_FROM_ADDRESS?.trim() || 'outreach@example.com',

@@ -1,4 +1,7 @@
 import type { ApiRequest, ApiResponse } from '../server.js'
+import { getConfig } from '../lib/config.js'
+import { verifyJwt } from '../lib/auth.js'
+import { usersDb } from '../routes/auth.js'
 
 export type UserRole = 'marketing_intern' | 'marketing_lead' | 'administrator'
 
@@ -6,6 +9,7 @@ export interface AuthUser {
   id: string
   email: string
   role: UserRole
+  full_name?: string
 }
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -23,39 +27,75 @@ const BEARER_TOKEN_ROLES: Record<string, UserRole> = {
 }
 
 export function extractAuthUser(req: ApiRequest): AuthUser | null {
-  const rawRoleHeader = req.headers['x-user-role']
-  const roleHeader = Array.isArray(rawRoleHeader) ? rawRoleHeader[0] : rawRoleHeader
+  const config = getConfig()
+  const rawAuthHeader = req.headers['authorization']
+  const authHeader = Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : rawAuthHeader
   const rawUserIdHeader = req.headers['x-user-id']
   const userIdHeader =
     (Array.isArray(rawUserIdHeader) ? rawUserIdHeader[0] : rawUserIdHeader)?.trim() || 'usr_anonymous'
-  const rawAuthHeader = req.headers['authorization']
-  const authHeader = Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : rawAuthHeader
+  const rawEmailHeader = req.headers['x-user-email']
+  const emailHeader = (Array.isArray(rawEmailHeader) ? rawEmailHeader[0] : rawEmailHeader)?.trim()
 
-  let role: UserRole | null = null
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim()
+    if (!token) return null
 
+    const jwtPayload = verifyJwt(token, config.authSecret)
+    if (jwtPayload) {
+      if (usersDb.length > 0) {
+        const dbUser = usersDb.find((u) => u.id === jwtPayload.sub)
+        if (!dbUser || !dbUser.is_active) {
+          return null
+        }
+        return {
+          id: dbUser.id,
+          email: dbUser.email,
+          role: dbUser.role,
+          full_name: dbUser.full_name,
+        }
+      }
+
+      return {
+        id: jwtPayload.sub,
+        email: jwtPayload.email,
+        role: jwtPayload.role,
+        full_name: jwtPayload.full_name,
+      }
+    }
+
+    if (config.allowDevAuth) {
+      const devRole = BEARER_TOKEN_ROLES[token]
+      if (devRole) {
+        return {
+          id: userIdHeader,
+          email: emailHeader || `${userIdHeader}@example.com`,
+          role: devRole,
+        }
+      }
+    }
+
+    return null
+  }
+
+  if (!config.allowDevAuth) {
+    return null
+  }
+
+  const rawRoleHeader = req.headers['x-user-role']
+  const roleHeader = Array.isArray(rawRoleHeader) ? rawRoleHeader[0] : rawRoleHeader
   if (roleHeader !== undefined) {
     const normalized = roleHeader.trim() as UserRole
     if (!VALID_ROLES.has(normalized)) {
       return null
     }
-    role = normalized
-  } else if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length).trim()
-    if (!token) return null
-    role = BEARER_TOKEN_ROLES[token] ?? null
-    if (!role) return null
-  } else {
-    return null
+    return {
+      id: userIdHeader,
+      email: emailHeader || `${userIdHeader}@example.com`,
+      role: normalized,
+    }
   }
 
-  const rawEmailHeader = req.headers['x-user-email']
-  const emailHeader = (Array.isArray(rawEmailHeader) ? rawEmailHeader[0] : rawEmailHeader)?.trim()
-
-  return {
-    id: userIdHeader,
-    email: emailHeader || `${userIdHeader}@example.com`,
-    role,
-  }
+  return null
 }
 
 export function requireAuth(req: ApiRequest, res: ApiResponse): AuthUser | null {
@@ -63,7 +103,7 @@ export function requireAuth(req: ApiRequest, res: ApiResponse): AuthUser | null 
   if (!user) {
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Authentication is required. Provide a valid Authorization bearer token or x-user-role header.',
+      message: 'Authentication is required. Sign in to obtain a valid bearer token.',
     })
     return null
   }
