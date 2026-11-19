@@ -7,6 +7,7 @@ import {
   type TeamCsvAnalysis,
 } from '../../lib/teamCsvParser'
 import { formatRoleLabel } from '../../lib/rbac'
+import { ReadinessPanel } from './ReadinessPanel'
 import { ModalShell } from '../ui/ModalShell'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import type { ToastType } from '../ui/Toast'
@@ -314,6 +315,8 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
           </div>
         </div>
       )}
+
+      <ReadinessPanel isApiMode={isApiMode} onToast={onToast} />
 
       <div className="relative max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
