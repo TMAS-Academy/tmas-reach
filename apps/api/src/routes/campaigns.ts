@@ -2,6 +2,8 @@ import crypto from 'node:crypto'
 import type { Router, ApiRequest, ApiResponse } from '../server.js'
 import { getConfig } from '../lib/config.js'
 import { requireAuth, requireMinimumRole } from '../middleware/rbac.js'
+import { createEmailProvider } from '../services/emailProvider.js'
+import { runBatchSchedulerTick } from '../services/batchScheduler.js'
 import { contactsDb } from './contacts.js'
 import { appendActivityLog } from './logs.js'
 
@@ -373,6 +375,47 @@ export function registerCampaignRoutes(router: Router) {
 
     campaign.updated_at = new Date().toISOString()
     res.status(200).json(campaign)
+  })
+
+  // POST /api/campaigns/:id/dispatch — Manually trigger a batch send for an approved/sending campaign
+  router.post('/api/campaigns/:id/dispatch', async (req: ApiRequest, res: ApiResponse) => {
+    const user = requireMinimumRole('marketing_lead')(req, res)
+    if (!user) return
+
+    const campaign = campaignsDb.find((c) => c.id === req.params.id)
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+
+    if (campaign.status !== 'approved' && campaign.status !== 'sending') {
+      res.status(400).json({
+        error: `Campaign must be approved before dispatch (current status: "${campaign.status}").`,
+      })
+      return
+    }
+
+    const dispatch = await runBatchSchedulerTick(createEmailProvider(), {
+      campaignId: campaign.id,
+    })
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'campaign.dispatched',
+      entity_type: 'campaign',
+      entity_id: campaign.id,
+      metadata: {
+        emailsSent: dispatch.emailsSent,
+        skippedSuppressed: dispatch.skippedSuppressed,
+        failedCount: dispatch.failedCount,
+        retriedCount: dispatch.retriedCount,
+      },
+    })
+
+    res.status(200).json({
+      campaign,
+      dispatch,
+    })
   })
 
   // GET /api/campaigns/:id/report — Campaign delivery summary

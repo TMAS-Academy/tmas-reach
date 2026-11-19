@@ -12,6 +12,7 @@ import { registerLogRoutes } from './routes/logs.js'
 import { registerSurveyRoutes } from './routes/surveys.js'
 import { registerUnsubscribeRoutes } from './routes/unsubscribe.js'
 import { registerWebhookRoutes } from './routes/webhooks.js'
+import { startBatchSchedulerLoop, stopBatchSchedulerLoop } from './services/batchScheduler.js'
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'OPTIONS'
 
@@ -405,6 +406,7 @@ export interface StartServerOptions {
   logger?: Logger
   router?: Router
   shutdownTimeoutMs?: number
+  enableScheduler?: boolean
   onShutdown?: () => Promise<void> | void
 }
 
@@ -497,6 +499,13 @@ export function createManagedServer(portOrOptions?: number | StartServerOptions)
     logger.info('sqlite_persistence_initialized', { dbPath: config.sqliteDbPath })
   }
 
+  const shouldStartScheduler =
+    opts.enableScheduler ?? (config.nodeEnv !== 'test' && config.schedulerIntervalMs > 0)
+  if (shouldStartScheduler) {
+    startBatchSchedulerLoop({ intervalMs: config.schedulerIntervalMs, logger })
+    logger.info('batch_scheduler_started', { intervalMs: config.schedulerIntervalMs })
+  }
+
   let shutdownController: GracefulShutdownController | null = null
   const app = createServerApp(router, {
     config,
@@ -513,6 +522,7 @@ export function createManagedServer(portOrOptions?: number | StartServerOptions)
     logger,
     timeoutMs: opts.shutdownTimeoutMs,
     onShutdown: async () => {
+      await stopBatchSchedulerLoop()
       await opts.onShutdown?.()
       closePersistence()
     },

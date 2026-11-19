@@ -98,6 +98,7 @@ describe('SQLite WAL Persistence & Activity Log Route', () => {
       updated_at: now,
     })
 
+    const retryAt = new Date(Date.now() + 60_000).toISOString()
     campaignRecipientsDb.push({
       id: 'rcp_wal_1',
       campaign_id: 'cmp_wal_1',
@@ -106,6 +107,10 @@ describe('SQLite WAL Persistence & Activity Log Route', () => {
       personalized_subject: 'Hello',
       personalized_body: 'Body',
       delivery_status: 'queued',
+      provider_message_id: 're_msg_wal_1',
+      error_message: 'Rate limited',
+      retry_count: 2,
+      next_retry_at: retryAt,
     })
 
     surveysDb.push({
@@ -152,6 +157,10 @@ describe('SQLite WAL Persistence & Activity Log Route', () => {
     expect(campaignsDb).toHaveLength(1)
     expect(campaignsDb[0].reviewed_by).toBe('usr_lead')
     expect(campaignRecipientsDb).toHaveLength(1)
+    expect(campaignRecipientsDb[0].provider_message_id).toBe('re_msg_wal_1')
+    expect(campaignRecipientsDb[0].error_message).toBe('Rate limited')
+    expect(campaignRecipientsDb[0].retry_count).toBe(2)
+    expect(campaignRecipientsDb[0].next_retry_at).toBe(retryAt)
     expect(surveysDb).toHaveLength(1)
     expect(surveysDb[0].grade_levels).toEqual(['9-12'])
     expect(activityLogsDb).toHaveLength(1)

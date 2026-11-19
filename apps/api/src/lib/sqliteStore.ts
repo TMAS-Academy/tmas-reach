@@ -208,6 +208,10 @@ export class SqliteStore {
       personalized_subject: String(row.personalized_subject),
       personalized_body: String(row.personalized_body),
       delivery_status: String(row.delivery_status) as CampaignRecipientRecord['delivery_status'],
+      provider_message_id: row.provider_message_id != null ? String(row.provider_message_id) : undefined,
+      error_message: row.error_message != null ? String(row.error_message) : undefined,
+      retry_count: row.retry_count != null ? Number(row.retry_count) : 0,
+      next_retry_at: row.next_retry_at != null ? String(row.next_retry_at) : undefined,
       sent_at: row.sent_at != null ? String(row.sent_at) : undefined,
       delivered_at: row.delivered_at != null ? String(row.delivered_at) : undefined,
       bounced_at: row.bounced_at != null ? String(row.bounced_at) : undefined,
@@ -358,10 +362,15 @@ export class SqliteStore {
       const insertRecipient = this.db.prepare(
         `INSERT INTO campaign_recipients (
           id, campaign_id, contact_id, email, personalized_subject, personalized_body,
-          delivery_status, sent_at, delivered_at, bounced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          delivery_status, provider_message_id, error_message, retry_count, next_retry_at,
+          sent_at, delivered_at, bounced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(campaign_id, contact_id) DO UPDATE SET
           delivery_status = excluded.delivery_status,
+          provider_message_id = excluded.provider_message_id,
+          error_message = excluded.error_message,
+          retry_count = excluded.retry_count,
+          next_retry_at = excluded.next_retry_at,
           sent_at = excluded.sent_at,
           delivered_at = excluded.delivered_at,
           bounced_at = excluded.bounced_at`
@@ -375,6 +384,10 @@ export class SqliteStore {
           r.personalized_subject,
           r.personalized_body,
           r.delivery_status,
+          r.provider_message_id ?? null,
+          r.error_message ?? null,
+          r.retry_count ?? 0,
+          r.next_retry_at ?? null,
           r.sent_at ?? null,
           r.delivered_at ?? null,
           r.bounced_at ?? null
