@@ -90,7 +90,7 @@ describe('Recipient Delivery Tracking and Bounce Handling', () => {
     expect(firstDispatch.sentCount).toBeGreaterThan(0)
 
     // Manually simulate an extraneous queued recipient row for the same contact
-    store.recipients.push({
+    store.enqueueRecipient({
       id: 'rcp-duplicate-test',
       campaign_id: campaign.id,
       contact_id: contact.id,
@@ -101,7 +101,9 @@ describe('Recipient Delivery Tracking and Bounce Handling', () => {
     const secondDispatch = store.dispatchCampaignBatch(campaign.id)
     expect(secondDispatch.sentCount).toBe(0)
 
-    const dupRecip = store.recipients.find((r) => r.id === 'rcp-duplicate-test')!
+    const dupRecip = store
+      .getRecipientsForCampaign(campaign.id)
+      .find((r) => r.id === 'rcp-duplicate-test')!
     expect(dupRecip.delivery_status).toBe('skipped_suppressed')
   })
 })

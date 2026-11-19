@@ -661,6 +661,18 @@ export class AppStore {
     return this.recipients.filter((r) => r.campaign_id === campaignId)
   }
 
+  public enqueueRecipient(
+    recipient: Omit<CampaignRecipient, 'created_at'> & { created_at?: string }
+  ): CampaignRecipient {
+    const entry: CampaignRecipient = {
+      ...recipient,
+      created_at: recipient.created_at ?? new Date().toISOString(),
+    }
+    this.recipients.push(entry)
+    this.save()
+    return entry
+  }
+
   public simulateRecipientBounce(recipientId: string): { success: boolean } {
     const rcp = this.recipients.find((r) => r.id === recipientId)
     if (!rcp) return { success: false }

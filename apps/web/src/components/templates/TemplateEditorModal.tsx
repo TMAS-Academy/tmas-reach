@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import type { EmailTemplate } from '../../types'
 import { store } from '../../lib/store'
-import { renderTemplateString } from '../../lib/templateEngine'
-import { X, Eye, Code, HelpCircle } from 'lucide-react'
+import {
+  renderTemplateString,
+  analyzeTemplateSpamRisk,
+  getDefaultUnsubscribeUrl,
+  sanitizePreviewHtml,
+} from '../../lib/templateEngine'
+import { X, Eye, Code, HelpCircle, AlertTriangle } from 'lucide-react'
 
 interface TemplateEditorModalProps {
   template?: EmailTemplate | null
@@ -76,10 +81,13 @@ export function TemplateEditorModal({ template, onClose, onSaved }: TemplateEdit
   }
 
   const previewSubject = renderTemplateString(subjectTemplate, { contact: SAMPLE_CONTACT })
-  const previewHtml = renderTemplateString(bodyHtml || bodyText, {
-    contact: SAMPLE_CONTACT,
-    unsubscribeUrl: 'https://reach.tmasacademy.org/unsubscribe/tok-demo-123',
-  })
+  const previewHtml = sanitizePreviewHtml(
+    renderTemplateString(bodyHtml || bodyText, {
+      contact: SAMPLE_CONTACT,
+      unsubscribeUrl: getDefaultUnsubscribeUrl('tok-demo-123'),
+    })
+  )
+  const spamAnalysis = analyzeTemplateSpamRisk(subjectTemplate, bodyHtml || bodyText)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -89,9 +97,6 @@ export function TemplateEditorModal({ template, onClose, onSaved }: TemplateEdit
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
               {template ? 'Edit Email Template' : 'New Email Template'}
             </h3>
-            <p className="text-xs text-slate-500">
-              Personalized with double-curly braces per Section 2 of Template Personalization Spec
-            </p>
           </div>
           <button
             onClick={onClose}
@@ -150,9 +155,14 @@ export function TemplateEditorModal({ template, onClose, onSaved }: TemplateEdit
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Subject Line Template *
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    Subject Line Template *
+                  </label>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {subjectTemplate.length} / 60 chars
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
@@ -162,6 +172,20 @@ export function TemplateEditorModal({ template, onClose, onSaved }: TemplateEdit
                   className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 font-mono text-xs"
                 />
               </div>
+
+              {spamAnalysis.warnings.length > 0 && (
+                <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                    <span>Deliverability Feedback</span>
+                  </div>
+                  {spamAnalysis.warnings.map((w, idx) => (
+                    <div key={idx} className="pl-5 text-slate-600 dark:text-slate-400">
+                      • {w}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center justify-between pb-1">

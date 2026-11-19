@@ -10,6 +10,65 @@ export interface ValidationResult {
   errors: string[]
 }
 
+export interface SpamRiskAnalysis {
+  hasWarnings: boolean
+  warnings: string[]
+  subjectLength: number
+  bodyLength: number
+}
+
+const COMMON_SPAM_WORDS = [
+  '100% free',
+  'act now',
+  'apply now',
+  'guaranteed',
+  'make money',
+  'no catch',
+  'no cost',
+  'risk-free',
+  'urgent',
+  'winner',
+  'congratulations',
+  '$$$',
+]
+
+export function analyzeTemplateSpamRisk(
+  subject: string,
+  body: string
+): SpamRiskAnalysis {
+  const warnings: string[] = []
+  const sub = subject.trim()
+  const full = `${subject} ${body}`.toLowerCase()
+
+  if (sub.length > 70) {
+    warnings.push(`Subject line is ${sub.length} characters long. Over 60-70 characters may get truncated on mobile screens.`)
+  }
+
+  const uppercaseWords = sub
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && w === w.toUpperCase() && /^[A-Z]+$/.test(w))
+  if (uppercaseWords.length >= 3) {
+    warnings.push('Subject contains multiple consecutive uppercase words which can trigger spam filters.')
+  }
+
+  COMMON_SPAM_WORDS.forEach((phrase) => {
+    if (full.includes(phrase)) {
+      warnings.push(`Contains spam-trigger phrase: "${phrase}".`)
+    }
+  })
+
+  if (/[!]{2,}/.test(subject) || /[?]{2,}/.test(subject)) {
+    warnings.push('Subject contains repeated punctuation (e.g. "!!" or "??").')
+  }
+
+  return {
+    hasWarnings: warnings.length > 0,
+    warnings,
+    subjectLength: sub.length,
+    bodyLength: body.length,
+  }
+}
+
 const KNOWN_VARIABLES = [
   'first_name',
   'last_name',
@@ -20,11 +79,90 @@ const KNOWN_VARIABLES = [
   'unsubscribe_url',
 ]
 
+export function getDefaultUnsubscribeUrl(token = 'sample-token'): string {
+  const configuredBase = (import.meta.env?.VITE_APP_PUBLIC_URL as string | undefined)?.trim()
+  const safeToken = encodeURIComponent(token)
+  if (configuredBase) {
+    return `${configuredBase.replace(/\/+$/, '')}/unsubscribe/${safeToken}`
+  }
+  if (
+    typeof window !== 'undefined' &&
+    window.location?.origin &&
+    window.location.origin !== 'null'
+  ) {
+    return `${window.location.origin}/?tab=unsubscribe&token=${safeToken}`
+  }
+  return `https://example.org/unsubscribe/${safeToken}`
+}
+
+const FORBIDDEN_TAGS = new Set([
+  'script',
+  'iframe',
+  'object',
+  'embed',
+  'form',
+  'meta',
+  'link',
+  'base',
+  'svg',
+  'math',
+  'template',
+  'noscript',
+])
+
+const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href'])
+
+function isUnsafeUrl(value: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  const normalized = value.replace(/[\u0000-\u0020]+/g, '').toLowerCase()
+  return (
+    normalized.startsWith('javascript:') ||
+    normalized.startsWith('vbscript:') ||
+    normalized.startsWith('data:text/html')
+  )
+}
+
+export function sanitizePreviewHtml(html: string): string {
+  if (!html) return ''
+
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const elements = Array.from(doc.body.querySelectorAll('*'))
+    for (const el of elements) {
+      if (FORBIDDEN_TAGS.has(el.tagName.toLowerCase())) {
+        el.remove()
+        continue
+      }
+      for (const attr of Array.from(el.attributes)) {
+        const name = attr.name.toLowerCase()
+        if (name.startsWith('on') || name === 'srcdoc') {
+          el.removeAttribute(attr.name)
+          continue
+        }
+        if (URL_ATTRS.has(name) && isUnsafeUrl(attr.value)) {
+          el.setAttribute(attr.name, '#')
+          continue
+        }
+        if (name === 'style' && /expression\s*\(|javascript\s*:/i.test(attr.value)) {
+          el.removeAttribute(attr.name)
+        }
+      }
+    }
+    return doc.body.innerHTML
+  }
+
+  return html
+    .replace(/<(script|iframe|object|embed|svg|math|form)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|iframe|object|embed|meta|link|base)[^>]*\/?>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src|action)\s*=\s*(['"])\s*(javascript:|vbscript:|data:text\/html)[^'"]*\2/gi, '$1="#"')
+}
+
 export function renderTemplateString(
   template: string,
   context: RenderContext = {}
 ): string {
-  const { contact = {}, unsubscribeUrl = 'https://reach.tmasacademy.org/unsubscribe/sample-token' } = context
+  const { contact = {}, unsubscribeUrl = getDefaultUnsubscribeUrl() } = context
 
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
     switch (key) {

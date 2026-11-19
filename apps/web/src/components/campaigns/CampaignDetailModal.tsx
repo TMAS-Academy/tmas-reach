@@ -2,7 +2,12 @@ import { useState } from 'react'
 import type { Campaign, Contact, EmailTemplate, UserRole } from '../../types'
 import { store } from '../../lib/store'
 import { hasPermission } from '../../lib/rbac'
-import { renderTemplateString, validateCampaignPreApproval } from '../../lib/templateEngine'
+import {
+  renderTemplateString,
+  validateCampaignPreApproval,
+  getDefaultUnsubscribeUrl,
+  sanitizePreviewHtml,
+} from '../../lib/templateEngine'
 import {
   X,
   Send,
@@ -118,10 +123,12 @@ export function CampaignDetailModal({
     ? renderTemplateString(template.subject_template, { contact: previewContact })
     : ''
   const renderedBody = template
-    ? renderTemplateString(template.body_html || template.body_text, {
-        contact: previewContact,
-        unsubscribeUrl: 'https://reach.tmasacademy.org/unsubscribe/sample-token',
-      })
+    ? sanitizePreviewHtml(
+        renderTemplateString(template.body_html || template.body_text, {
+          contact: previewContact,
+          unsubscribeUrl: getDefaultUnsubscribeUrl('sample-token'),
+        })
+      )
     : ''
 
   return (

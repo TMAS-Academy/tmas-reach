@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { renderTemplateString, validateCampaignPreApproval } from '../templateEngine'
+import {
+  renderTemplateString,
+  validateCampaignPreApproval,
+  analyzeTemplateSpamRisk,
+  sanitizePreviewHtml,
+  getDefaultUnsubscribeUrl,
+} from '../templateEngine'
 import { store } from '../store'
 import type { EmailTemplate } from '../../types'
 
@@ -88,5 +94,49 @@ describe('Template Personalization Engine & Pre-Approval Checks', () => {
     expect(res.template?.name).toBe(`${original.name} (Copy)`)
     expect(res.template?.subject_template).toBe(original.subject_template)
     expect(res.template?.body_html).toBe(original.body_html)
+  })
+
+  it('uses an origin-based or neutral fallback unsubscribe URL without hardcoded academy domain', () => {
+    const url = getDefaultUnsubscribeUrl('tok-999')
+    expect(url).toContain('tok-999')
+    expect(url).not.toContain('tmasacademy.org')
+  })
+
+  it('sanitizes dangerous tags, event handlers, and javascript URLs from preview HTML', () => {
+    const dirty =
+      '<p onclick="alert(1)">Hello <a href="javascript:alert(2)">click</a></p><script>evil()</script><iframe src="https://bad.test"></iframe>'
+    const clean = sanitizePreviewHtml(dirty)
+    expect(clean).toContain('<p>Hello ')
+    expect(clean).not.toContain('<script')
+    expect(clean).not.toContain('<iframe')
+    expect(clean).not.toContain('onclick')
+    expect(clean).not.toContain('javascript:')
+  })
+
+  it('reports no spam warnings for clean educator outreach copy', () => {
+    const res = analyzeTemplateSpamRisk(
+      'Spring STEM workshop invitation for {{organization}}',
+      '<p>Hello {{first_name}}, we would love to partner with your department.</p>'
+    )
+    expect(res.hasWarnings).toBe(false)
+    expect(res.warnings).toHaveLength(0)
+    expect(res.subjectLength).toBe(52)
+  })
+
+  it('flags long subjects, excessive uppercase words, spam phrases, and repeated punctuation', () => {
+    const longSubject =
+      'URGENT FREE INVITATION ACT NOW FOR ALL EDUCATORS ACROSS THE ENTIRE DISTRICT!!'
+    const res = analyzeTemplateSpamRisk(
+      longSubject,
+      'This offer is 100% free and risk-free with no catch.'
+    )
+    expect(res.hasWarnings).toBe(true)
+    expect(res.warnings.some((w) => w.includes('characters long'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('uppercase words'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('repeated punctuation'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('"100% free"'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('"act now"'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('"risk-free"'))).toBe(true)
+    expect(res.warnings.some((w) => w.includes('"no catch"'))).toBe(true)
   })
 })
