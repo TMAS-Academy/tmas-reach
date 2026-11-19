@@ -1,5 +1,8 @@
+import crypto from 'node:crypto'
 import type { Router, ApiRequest, ApiResponse } from '../server.js'
 import { requireAuth, requireMinimumRole } from '../middleware/rbac.js'
+import { campaignRecipientsDb } from './campaigns.js'
+import { appendActivityLog } from './logs.js'
 
 export type ContactStatus = 'active' | 'unsubscribed' | 'bounced' | 'suppressed'
 
@@ -16,6 +19,82 @@ export interface ContactRecord {
   created_by: string
   created_at: string
   updated_at: string
+}
+
+const VALID_CONTACT_STATUSES = new Set<ContactStatus>([
+  'active',
+  'unsubscribed',
+  'bounced',
+  'suppressed',
+])
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export function generateContactId(): string {
+  return `cnt_${crypto.randomUUID()}`
+}
+
+export function generateUnsubscribeToken(): string {
+  return `tok_${crypto.randomBytes(16).toString('hex')}`
+}
+
+// RFC-4180 compliant CSV parser handling quoted fields, embedded commas, escaped quotes, and CRLF/LF.
+export function parseCsvRecords(csvContent: string): string[][] {
+  const input = csvContent.replace(/^\uFEFF/, '')
+  const rows: string[][] = []
+  let currentRow: string[] = []
+  let currentField = ''
+  let inQuotes = false
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') {
+          currentField += '"'
+          i++
+        } else {
+          inQuotes = false
+        }
+      } else {
+        currentField += ch
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      currentRow.push(currentField.trim())
+      currentField = ''
+    } else if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && input[i + 1] === '\n') {
+        i++
+      }
+      currentRow.push(currentField.trim())
+      currentField = ''
+      const isNonEmpty = currentRow.some((cell) => cell.length > 0)
+      const isComment = currentRow.length === 1 && currentRow[0].startsWith('#')
+      if (isNonEmpty && !isComment) {
+        rows.push(currentRow)
+      }
+      currentRow = []
+    } else {
+      currentField += ch
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim())
+    const isNonEmpty = currentRow.some((cell) => cell.length > 0)
+    const isComment = currentRow.length === 1 && currentRow[0].startsWith('#')
+    if (isNonEmpty && !isComment) {
+      rows.push(currentRow)
+    }
+  }
+
+  return rows
 }
 
 // Clean in-memory contacts store (no fake data)
@@ -61,8 +140,8 @@ export function registerContactRoutes(router: Router) {
       result = result.filter((c) => c.status === status)
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1)
-    const limitNum = Math.max(1, parseInt(limit, 10) || 25)
+    const pageNum = Math.max(1, Number.parseInt(page, 10) || 1)
+    const limitNum = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 25))
     const total = result.length
     const totalPages = Math.ceil(total / limitNum) || 1
     const offset = (pageNum - 1) * limitNum
@@ -86,8 +165,8 @@ export function registerContactRoutes(router: Router) {
 
     const { email, first_name, last_name, organization, job_role, audience_tag } = req.body || {}
 
-    if (!email || !email.trim()) {
-      res.status(400).json({ error: 'Email is required' })
+    if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim().toLowerCase())) {
+      res.status(400).json({ error: 'A valid email is required' })
       return
     }
 
@@ -98,22 +177,30 @@ export function registerContactRoutes(router: Router) {
       return
     }
 
+    const now = new Date().toISOString()
     const newContact: ContactRecord = {
-      id: `cnt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateContactId(),
       email: normEmail,
-      first_name: first_name?.trim() || '',
-      last_name: last_name?.trim() || '',
-      organization: organization?.trim() || '',
-      job_role: job_role?.trim() || '',
-      audience_tag: audience_tag || 'educators',
+      first_name: typeof first_name === 'string' ? first_name.trim() : '',
+      last_name: typeof last_name === 'string' ? last_name.trim() : '',
+      organization: typeof organization === 'string' ? organization.trim() : '',
+      job_role: typeof job_role === 'string' ? job_role.trim() : '',
+      audience_tag: typeof audience_tag === 'string' && audience_tag.trim() ? audience_tag.trim() : 'educators',
       status: 'active',
-      unsubscribe_token: `tok_${Math.random().toString(36).substring(2, 12)}`,
+      unsubscribe_token: generateUnsubscribeToken(),
       created_by: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     }
 
     contactsDb.unshift(newContact)
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contact.created',
+      entity_type: 'contact',
+      entity_id: newContact.id,
+      metadata: { email: newContact.email, audience_tag: newContact.audience_tag },
+    })
     res.status(201).json(newContact)
   })
 
@@ -131,35 +218,95 @@ export function registerContactRoutes(router: Router) {
 
     const { status, email, first_name, last_name, organization, job_role, audience_tag } = req.body || {}
 
-    // Enforce RBAC: Only marketing_lead and administrator can manually suppress or reactivate contacts
-    if (status && status !== contact.status) {
-      if (status === 'suppressed' || contact.status === 'suppressed') {
-        const checkLead = requireMinimumRole('marketing_lead')(req, res)
-        if (!checkLead) return
-      }
-      contact.status = status
-    }
-
-    if (email && email.trim().toLowerCase() !== contact.email.toLowerCase()) {
-      const normEmail = email.trim().toLowerCase()
-      if (contactsDb.some((c) => c.id !== id && c.email.toLowerCase() === normEmail)) {
-        res.status(409).json({ error: `Email "${normEmail}" is already used by another contact.` })
+    if (status !== undefined) {
+      if (typeof status !== 'string' || !VALID_CONTACT_STATUSES.has(status as ContactStatus)) {
+        res.status(400).json({ error: 'Invalid contact status.' })
         return
       }
-      contact.email = normEmail
+      if (status !== contact.status) {
+        // Only marketing_lead and administrator can manually suppress or reactivate suppressed/unsubscribed/bounced contacts
+        if (
+          status === 'suppressed' ||
+          contact.status === 'suppressed' ||
+          (status === 'active' && contact.status !== 'active')
+        ) {
+          const checkLead = requireMinimumRole('marketing_lead')(req, res)
+          if (!checkLead) return
+        }
+        contact.status = status as ContactStatus
+      }
     }
 
-    if (first_name !== undefined) contact.first_name = first_name
-    if (last_name !== undefined) contact.last_name = last_name
-    if (organization !== undefined) contact.organization = organization
-    if (job_role !== undefined) contact.job_role = job_role
-    if (audience_tag !== undefined) contact.audience_tag = audience_tag
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim().toLowerCase())) {
+        res.status(400).json({ error: 'A valid email is required' })
+        return
+      }
+      const normEmail = email.trim().toLowerCase()
+      if (normEmail !== contact.email.toLowerCase()) {
+        if (contactsDb.some((c) => c.id !== id && c.email.toLowerCase() === normEmail)) {
+          res.status(409).json({ error: `Email "${normEmail}" is already used by another contact.` })
+          return
+        }
+        contact.email = normEmail
+      }
+    }
+
+    if (first_name !== undefined) contact.first_name = String(first_name).trim()
+    if (last_name !== undefined) contact.last_name = String(last_name).trim()
+    if (organization !== undefined) contact.organization = String(organization).trim()
+    if (job_role !== undefined) contact.job_role = String(job_role).trim()
+    if (audience_tag !== undefined) contact.audience_tag = String(audience_tag).trim()
     contact.updated_at = new Date().toISOString()
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contact.updated',
+      entity_type: 'contact',
+      entity_id: contact.id,
+      metadata: { status: contact.status },
+    })
 
     res.status(200).json(contact)
   })
 
-  // POST /api/contacts/import — bulk CSV ingestion with deduplication and suppression guards
+  // DELETE /api/contacts/:id — Marketing Lead / Administrator contact deletion
+  router.delete('/api/contacts/:id', (req: ApiRequest, res: ApiResponse) => {
+    const user = requireMinimumRole('marketing_lead')(req, res)
+    if (!user) return
+
+    const { id } = req.params
+    const idx = contactsDb.findIndex((c) => c.id === id)
+    if (idx === -1) {
+      res.status(404).json({ error: 'Contact not found' })
+      return
+    }
+
+    const [removed] = contactsDb.splice(idx, 1)
+    let cancelledQueued = 0
+    for (const r of campaignRecipientsDb) {
+      if (r.contact_id === removed.id && r.delivery_status === 'queued') {
+        r.delivery_status = 'skipped_suppressed'
+        cancelledQueued++
+      }
+    }
+
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contact.deleted',
+      entity_type: 'contact',
+      entity_id: removed.id,
+      metadata: { email: removed.email, cancelledQueued },
+    })
+
+    res.status(200).json({
+      deleted: true,
+      id: removed.id,
+      cancelledQueued,
+    })
+  })
+
+  // POST /api/contacts/import — bulk CSV ingestion with RFC-4180 parsing, deduplication, and suppression guards
   router.post('/api/contacts/import', (req: ApiRequest, res: ApiResponse) => {
     const user = requireAuth(req, res)
     if (!user) return
@@ -170,17 +317,13 @@ export function registerContactRoutes(router: Router) {
       return
     }
 
-    const lines = csvContent
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith('#'))
-
-    if (lines.length < 2) {
+    const records = parseCsvRecords(csvContent)
+    if (records.length < 2) {
       res.status(400).json({ error: 'CSV must contain a header line and at least one data row.' })
       return
     }
 
-    const headerParts = lines[0].split(',').map((h) => h.replace(/["'\s]/g, '').toLowerCase())
+    const headerParts = records[0].map((h) => h.replace(/["'\s]/g, '').toLowerCase())
     const emailIndex = headerParts.indexOf('email')
     if (emailIndex === -1) {
       res.status(400).json({ error: 'CSV is missing required "email" column.' })
@@ -198,17 +341,19 @@ export function registerContactRoutes(router: Router) {
     const suppressedBlocked: string[] = []
     const invalidRows: { line: number; raw: string; error: string }[] = []
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i]
-      const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim())
-      const email = cols[emailIndex]?.toLowerCase()
+    for (let i = 1; i < records.length; i++) {
+      const cols = records[i]
+      const email = (cols[emailIndex] || '').trim().toLowerCase()
 
-      if (!email || !email.includes('@')) {
-        invalidRows.push({ line: i + 1, raw: line, error: 'Invalid or missing email address.' })
+      if (!email || !EMAIL_REGEX.test(email)) {
+        invalidRows.push({
+          line: i + 1,
+          raw: cols.join(','),
+          error: 'Invalid or missing email address.',
+        })
         continue
       }
 
-      // Check if email already suppressed or bounced
       const existing = contactsDb.find((c) => c.email.toLowerCase() === email)
       if (existing) {
         if (existing.status === 'suppressed' || existing.status === 'bounced' || existing.status === 'unsubscribed') {
@@ -229,28 +374,42 @@ export function registerContactRoutes(router: Router) {
         continue
       }
 
+      const now = new Date().toISOString()
       const newContact: ContactRecord = {
-        id: `cnt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: generateContactId(),
         email,
-        first_name: firstNameIdx !== -1 ? cols[firstNameIdx] : '',
-        last_name: lastNameIdx !== -1 ? cols[lastNameIdx] : '',
-        organization: orgIdx !== -1 ? cols[orgIdx] : '',
-        job_role: roleIdx !== -1 ? cols[roleIdx] : '',
-        audience_tag: audienceIdx !== -1 ? cols[audienceIdx] : 'educators',
+        first_name: firstNameIdx !== -1 ? cols[firstNameIdx] || '' : '',
+        last_name: lastNameIdx !== -1 ? cols[lastNameIdx] || '' : '',
+        organization: orgIdx !== -1 ? cols[orgIdx] || '' : '',
+        job_role: roleIdx !== -1 ? cols[roleIdx] || '' : '',
+        audience_tag: audienceIdx !== -1 && cols[audienceIdx] ? cols[audienceIdx] : 'educators',
         status: 'active',
-        unsubscribe_token: `tok_${Math.random().toString(36).substring(2, 12)}`,
+        unsubscribe_token: generateUnsubscribeToken(),
         created_by: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
       }
 
       contactsDb.unshift(newContact)
       createdContacts.push(newContact)
     }
 
+    appendActivityLog({
+      actor_id: user.id,
+      action: 'contacts.imported',
+      entity_type: 'contact',
+      metadata: {
+        totalRows: records.length - 1,
+        importedCount: createdContacts.length,
+        skippedDuplicatesCount: skippedDuplicates.length,
+        suppressedBlockedCount: suppressedBlocked.length,
+        invalidRowsCount: invalidRows.length,
+      },
+    })
+
     res.status(200).json({
       summary: {
-        totalRows: lines.length - 1,
+        totalRows: records.length - 1,
         importedCount: createdContacts.length,
         skippedDuplicatesCount: skippedDuplicates.length,
         suppressedBlockedCount: suppressedBlocked.length,

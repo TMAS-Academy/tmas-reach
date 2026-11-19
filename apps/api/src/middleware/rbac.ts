@@ -14,26 +14,42 @@ export const ROLE_HIERARCHY: Record<UserRole, number> = {
   administrator: 3,
 }
 
+const VALID_ROLES = new Set<UserRole>(['marketing_intern', 'marketing_lead', 'administrator'])
+
+const BEARER_TOKEN_ROLES: Record<string, UserRole> = {
+  'admin-token': 'administrator',
+  'lead-token': 'marketing_lead',
+  'intern-token': 'marketing_intern',
+}
+
 export function extractAuthUser(req: ApiRequest): AuthUser | null {
-  const roleHeader = req.headers['x-user-role'] as string | undefined
-  const userIdHeader = (req.headers['x-user-id'] as string | undefined) || 'usr_anonymous'
-  const authHeader = req.headers['authorization'] as string | undefined
+  const rawRoleHeader = req.headers['x-user-role']
+  const roleHeader = Array.isArray(rawRoleHeader) ? rawRoleHeader[0] : rawRoleHeader
+  const rawUserIdHeader = req.headers['x-user-id']
+  const userIdHeader =
+    (Array.isArray(rawUserIdHeader) ? rawUserIdHeader[0] : rawUserIdHeader)?.trim() || 'usr_anonymous'
+  const rawAuthHeader = req.headers['authorization']
+  const authHeader = Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : rawAuthHeader
 
-  let role: UserRole = 'marketing_intern'
+  let role: UserRole | null = null
 
-  if (roleHeader && (roleHeader === 'marketing_intern' || roleHeader === 'marketing_lead' || roleHeader === 'administrator')) {
-    role = roleHeader
+  if (roleHeader !== undefined) {
+    const normalized = roleHeader.trim() as UserRole
+    if (!VALID_ROLES.has(normalized)) {
+      return null
+    }
+    role = normalized
   } else if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '').trim()
-    if (token === 'admin-token') role = 'administrator'
-    else if (token === 'lead-token') role = 'marketing_lead'
-    else role = 'marketing_intern'
+    const token = authHeader.slice('Bearer '.length).trim()
+    if (!token) return null
+    role = BEARER_TOKEN_ROLES[token] ?? null
+    if (!role) return null
   } else {
-    // If no credentials provided, return null (unauthenticated)
     return null
   }
 
-  const emailHeader = (req.headers['x-user-email'] as string | undefined)?.trim()
+  const rawEmailHeader = req.headers['x-user-email']
+  const emailHeader = (Array.isArray(rawEmailHeader) ? rawEmailHeader[0] : rawEmailHeader)?.trim()
 
   return {
     id: userIdHeader,
@@ -42,15 +58,12 @@ export function extractAuthUser(req: ApiRequest): AuthUser | null {
   }
 }
 
-export function requireAuth(
-  req: ApiRequest,
-  res: ApiResponse
-): AuthUser | null {
+export function requireAuth(req: ApiRequest, res: ApiResponse): AuthUser | null {
   const user = extractAuthUser(req)
   if (!user) {
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Authentication is required. Provide Authorization bearer token or x-user-role header.',
+      message: 'Authentication is required. Provide a valid Authorization bearer token or x-user-role header.',
     })
     return null
   }
