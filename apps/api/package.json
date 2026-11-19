@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "start": "node --disable-warning=ExperimentalWarning dist/server.js",
     "test": "vitest run"
   },
   "dependencies": {},
