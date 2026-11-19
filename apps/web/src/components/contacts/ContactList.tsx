@@ -296,10 +296,10 @@ export function ContactList({
       onToast?.('error', 'Manual suppression requires Marketing Lead or Administrator permission.')
       return
     }
-    const count = selectedContactIds.size
-    selectedContactIds.forEach((id) => store.setContactStatus(id, 'suppressed'))
+    const ids = Array.from(selectedContactIds)
+    store.setContactsStatus(ids, 'suppressed')
     setSelectedContactIds(new Set())
-    onToast?.('info', `Suppressed ${count} contact(s).`)
+    onToast?.('info', `Suppressed ${ids.length} contact(s).`)
   }
 
   const handleExportCsv = () => {

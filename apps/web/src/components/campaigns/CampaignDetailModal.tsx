@@ -70,6 +70,8 @@ export function CampaignDetailModal({
   const [actionError, setActionError] = useState<string | null>(null)
   const [recipientFilter, setRecipientFilter] = useState<string>('all')
   const [recipientSearch, setRecipientSearch] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
+  const [dispatching, setDispatching] = useState(false)
 
   const canReview = hasPermission(userRole, 'campaigns:review')
   const canDispatch = hasPermission(userRole, 'campaigns:dispatch')
@@ -135,9 +137,28 @@ export function CampaignDetailModal({
     onUpdated()
   }
 
-  const handleTestSend = () => {
+  const handleTestSend = async () => {
+    setActionError(null)
     const currentUser = store.getCurrentUser()
-    onToast?.('success', `Test email rendered for ${currentUser.email}.`)
+    setSendingTest(true)
+    try {
+      const res = await store.sendTestEmail(campaign.id, currentUser.email)
+      if (!res.success) {
+        const errText = res.error || 'Failed to send test email.'
+        setActionError(errText)
+        onToast?.('error', errText)
+        return
+      }
+      const modeLabel =
+        res.providerMode === 'resend'
+          ? 'Resend'
+          : res.providerMode === 'mock'
+            ? 'API mock sender'
+            : 'local preview'
+      onToast?.('success', `Test email sent to ${res.to} (${modeLabel}).`)
+    } finally {
+      setSendingTest(false)
+    }
   }
 
   const handleSubmitForApproval = () => {
@@ -180,15 +201,36 @@ export function CampaignDetailModal({
     onUpdated()
   }
 
-  const handleDispatchBatch = () => {
+  const handleDispatchBatch = async () => {
     setActionError(null)
-    const res = store.dispatchCampaignBatch(campaign.id)
-    if (res.errors.length > 0) {
-      setActionError(res.errors.join(' '))
+    if (!store.isApiMode()) {
+      const res = store.dispatchCampaignBatch(campaign.id)
+      if (res.errors.length > 0) {
+        setActionError(res.errors.join(' '))
+        return
+      }
+      onToast?.('success', `Dispatched batch of ${res.sentCount} message(s).`)
+      onUpdated()
       return
     }
-    onToast?.('success', `Dispatched batch of ${res.sentCount} message(s).`)
-    onUpdated()
+
+    setDispatching(true)
+    try {
+      const res = await store.dispatchCampaignBatchAsync(campaign.id)
+      if (res.errors.length > 0) {
+        setActionError(res.errors.join(' '))
+        return
+      }
+      onToast?.(
+        'success',
+        `Dispatched ${res.sentCount} message(s)${
+          res.skippedSuppressed ? ` (${res.skippedSuppressed} suppressed skipped)` : ''
+        }.`
+      )
+      onUpdated()
+    } finally {
+      setDispatching(false)
+    }
   }
 
   const previewContact = activeTargetContacts[0] || DEFAULT_PREVIEW_SAMPLE
@@ -294,10 +336,11 @@ export function CampaignDetailModal({
                 </div>
                 <button
                   type="button"
-                  onClick={handleTestSend}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+                  disabled={sendingTest}
+                  onClick={() => void handleTestSend()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
                 >
-                  <Mail className="h-3.5 w-3.5" /> Test Send to Self
+                  <Mail className="h-3.5 w-3.5" /> {sendingTest ? 'Sending Test...' : 'Test Send to Self'}
                 </button>
               </div>
 
@@ -642,10 +685,12 @@ export function CampaignDetailModal({
                   {canDispatch ? (
                     <button
                       type="button"
-                      onClick={handleDispatchBatch}
-                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-400 px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 transition-colors"
+                      disabled={dispatching}
+                      onClick={() => void handleDispatchBatch()}
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-400 px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 transition-colors"
                     >
-                      <Zap className="h-3.5 w-3.5" /> Dispatch Batch ({campaign.batch_size} max)
+                      <Zap className="h-3.5 w-3.5" />{' '}
+                      {dispatching ? 'Dispatching...' : `Dispatch Batch (${campaign.batch_size} max)`}
                     </button>
                   ) : (
                     <button

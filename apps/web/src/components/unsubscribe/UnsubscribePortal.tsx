@@ -1,49 +1,151 @@
-import { useMemo, useState } from 'react'
-import type { Contact } from '../../types'
+import { useEffect, useMemo, useState } from 'react'
+import type { Contact, ContactStatus } from '../../types'
+import { apiClient, type ApiClient } from '../../lib/apiClient'
 import { store } from '../../lib/store'
 import { CheckCircle, AlertCircle, Shield, ArrowLeft } from 'lucide-react'
 
 interface UnsubscribePortalProps {
   contacts: Contact[]
   onBack: () => void
+  backLabel?: string
+  client?: ApiClient
 }
 
-function readTokenFromUrl(): string {
+interface LookupResult {
+  email: string
+  organization?: string
+  status: ContactStatus
+  token: string
+  first_name?: string
+  last_name?: string
+  job_role?: string
+}
+
+function readUnsubscribeTokenFromUrl(): string {
   try {
-    return new URLSearchParams(window.location.search).get('token')?.trim() || ''
+    const queryToken = new URLSearchParams(window.location.search).get('token')?.trim()
+    if (queryToken) return queryToken
+
+    const pathMatch = window.location.pathname.match(/^\/unsubscribe\/([^/]+)\/?$/)
+    if (pathMatch?.[1]) {
+      return decodeURIComponent(pathMatch[1]).trim()
+    }
   } catch {
-    return ''
+    // Ignore malformed URLs
   }
+  return ''
 }
 
-export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) {
-  const initialUrlToken = useMemo(() => readTokenFromUrl(), [])
+export function UnsubscribePortal({
+  contacts,
+  onBack,
+  backLabel = 'Back to Dashboard',
+  client = apiClient,
+}: UnsubscribePortalProps) {
+  const isRemote = client.isConfigured()
+  const initialUrlToken = useMemo(() => readUnsubscribeTokenFromUrl(), [])
   const [tokenInput, setTokenInput] = useState(
     () => initialUrlToken || contacts[0]?.unsubscribe_token || ''
   )
   const [lookupToken, setLookupToken] = useState<string>(() => initialUrlToken)
+  const [remoteLookup, setRemoteLookup] = useState<LookupResult | null>(null)
+  const [loading, setLoading] = useState(false)
   const [justUnsubscribedEmail, setJustUnsubscribedEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(() => {
-    if (!initialUrlToken) return null
+    if (!initialUrlToken || isRemote) return null
     const found = contacts.some((c) => c.unsubscribe_token === initialUrlToken)
     return found ? null : 'Invalid or expired unsubscribe token.'
   })
 
-  const confirmedContact = useMemo(() => {
-    if (!lookupToken) return null
-    return contacts.find((c) => c.unsubscribe_token === lookupToken) || null
-  }, [contacts, lookupToken])
+  useEffect(() => {
+    if (!isRemote || !initialUrlToken) return
+    let active = true
+    void client
+      .get<{
+        valid: boolean
+        email: string
+        organization?: string
+        current_status: ContactStatus
+      }>(`/unsubscribe/${encodeURIComponent(initialUrlToken)}`, {
+        skipAuth: true,
+        maxRetries: 0,
+      })
+      .then((res) => {
+        if (!active) return
+        setRemoteLookup({
+          email: res.email,
+          organization: res.organization,
+          status: res.current_status,
+          token: initialUrlToken,
+        })
+        setError(null)
+      })
+      .catch(() => {
+        if (!active) return
+        setRemoteLookup(null)
+        setError('Invalid or expired unsubscribe token.')
+      })
 
-  const handleLookup = (e?: React.FormEvent) => {
+    return () => {
+      active = false
+    }
+  }, [client, initialUrlToken, isRemote])
+
+  const localConfirmed = useMemo<LookupResult | null>(() => {
+    if (isRemote || !lookupToken) return null
+    const c = contacts.find((item) => item.unsubscribe_token === lookupToken)
+    if (!c) return null
+    return {
+      email: c.email,
+      organization: c.organization,
+      status: c.status,
+      token: c.unsubscribe_token,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      job_role: c.job_role,
+    }
+  }, [contacts, isRemote, lookupToken])
+
+  const confirmedRecipient = isRemote ? remoteLookup : localConfirmed
+
+  const handleLookup = async (e?: React.FormEvent) => {
     e?.preventDefault()
     setError(null)
     setJustUnsubscribedEmail(null)
     const trimmed = tokenInput.trim()
     if (!trimmed) {
       setLookupToken('')
+      setRemoteLookup(null)
       setError('Please enter an unsubscribe token.')
       return
     }
+
+    if (isRemote) {
+      setLoading(true)
+      try {
+        const res = await client.get<{
+          valid: boolean
+          email: string
+          organization?: string
+          current_status: ContactStatus
+        }>(`/unsubscribe/${encodeURIComponent(trimmed)}`, { skipAuth: true, maxRetries: 0 })
+        setLookupToken(trimmed)
+        setRemoteLookup({
+          email: res.email,
+          organization: res.organization,
+          status: res.current_status,
+          token: trimmed,
+        })
+      } catch {
+        setLookupToken('')
+        setRemoteLookup(null)
+        setError('Invalid or expired unsubscribe token.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     const found = contacts.find((c) => c.unsubscribe_token === trimmed)
     if (!found) {
       setLookupToken('')
@@ -53,9 +155,32 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
     setLookupToken(trimmed)
   }
 
-  const handleConfirmUnsubscribe = () => {
-    if (!confirmedContact || confirmedContact.status === 'unsubscribed') return
-    const res = store.unsubscribeContactByToken(confirmedContact.unsubscribe_token)
+  const handleConfirmUnsubscribe = async () => {
+    if (!confirmedRecipient || confirmedRecipient.status === 'unsubscribed') return
+
+    if (isRemote) {
+      setLoading(true)
+      setError(null)
+      try {
+        await client.post<{ success: boolean }>(
+          '/unsubscribe',
+          { token: confirmedRecipient.token },
+          { skipAuth: true, maxRetries: 0 }
+        )
+        setJustUnsubscribedEmail(confirmedRecipient.email)
+        setRemoteLookup((prev) => (prev ? { ...prev, status: 'unsubscribed' } : prev))
+        if (store.isApiMode()) {
+          void store.hydrateFromApi()
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to process unsubscribe request.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    const res = store.unsubscribeContactByToken(confirmedRecipient.token)
     if (res.success && res.contact) {
       setJustUnsubscribedEmail(res.contact.email)
     } else {
@@ -70,7 +195,7 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
         onClick={onBack}
         className="mb-6 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <ArrowLeft className="h-4 w-4" /> {backLabel}
       </button>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -120,9 +245,10 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
                 />
                 <button
                   type="submit"
-                  className="shrink-0 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+                  disabled={loading}
+                  className="shrink-0 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
                 >
-                  Lookup Token
+                  {loading ? 'Checking...' : 'Lookup Token'}
                 </button>
               </div>
             </form>
@@ -137,28 +263,31 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
               </div>
             )}
 
-            {confirmedContact && (
+            {confirmedRecipient && (
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <div className="text-xs">
                   <div className="text-slate-500 dark:text-slate-400">Target Recipient:</div>
                   <div className="font-semibold text-slate-900 dark:text-white">
-                    {confirmedContact.first_name} {confirmedContact.last_name} (
-                    {confirmedContact.email})
+                    {confirmedRecipient.first_name || confirmedRecipient.last_name
+                      ? `${confirmedRecipient.first_name || ''} ${confirmedRecipient.last_name || ''} (${confirmedRecipient.email})`.trim()
+                      : confirmedRecipient.email}
                   </div>
-                  {(confirmedContact.job_role || confirmedContact.organization) && (
+                  {(confirmedRecipient.job_role || confirmedRecipient.organization) && (
                     <div className="text-slate-600 dark:text-slate-400">
-                      {[confirmedContact.job_role, confirmedContact.organization]
+                      {[confirmedRecipient.job_role, confirmedRecipient.organization]
                         .filter(Boolean)
                         .join(' at ')}
                     </div>
                   )}
                   <div className="mt-1">
                     Current Status:{' '}
-                    <span className="font-mono font-bold uppercase">{confirmedContact.status}</span>
+                    <span className="font-mono font-bold uppercase">
+                      {confirmedRecipient.status}
+                    </span>
                   </div>
                 </div>
 
-                {confirmedContact.status === 'unsubscribed' ? (
+                {confirmedRecipient.status === 'unsubscribed' ? (
                   <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                     <CheckCircle className="h-4 w-4 shrink-0" />
                     <span>Already unsubscribed — this recipient will not receive further emails.</span>
@@ -166,10 +295,11 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
                 ) : (
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={handleConfirmUnsubscribe}
-                    className="w-full rounded-lg bg-rose-600 py-2.5 text-xs font-semibold text-white hover:bg-rose-700 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70"
+                    className="w-full rounded-lg bg-rose-600 py-2.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70"
                   >
-                    Confirm Opt-Out from All Outreach
+                    {loading ? 'Processing...' : 'Confirm Opt-Out from All Outreach'}
                   </button>
                 )}
               </div>
@@ -188,6 +318,17 @@ export function UnsubscribePortal({ contacts, onBack }: UnsubscribePortalProps) 
                       onClick={() => {
                         setTokenInput(c.unsubscribe_token)
                         setLookupToken(c.unsubscribe_token)
+                        if (isRemote) {
+                          setRemoteLookup({
+                            email: c.email,
+                            organization: c.organization,
+                            status: c.status,
+                            token: c.unsubscribe_token,
+                            first_name: c.first_name,
+                            last_name: c.last_name,
+                            job_role: c.job_role,
+                          })
+                        }
                         setJustUnsubscribedEmail(null)
                         setError(null)
                       }}

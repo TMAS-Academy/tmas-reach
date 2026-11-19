@@ -36,11 +36,18 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
   const [newEmail, setNewEmail] = useState('')
   const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState<UserRole>('marketing_intern')
+  const [newPassword, setNewPassword] = useState('')
+  const [savingMember, setSavingMember] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
+  const [createdCredentials, setCreatedCredentials] = useState<
+    Array<{ email: string; role: UserRole; temporary_password: string }>
+  >([])
 
   const [csvRawText, setCsvRawText] = useState('')
   const [csvAnalysis, setCsvAnalysis] = useState<TeamCsvAnalysis | null>(null)
+  const [importingCsv, setImportingCsv] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const isApiMode = store.isApiMode()
 
   const adminCount = useMemo(
     () => users.filter((u) => u.role === 'administrator').length,
@@ -86,7 +93,7 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
     setDeleteTarget(null)
   }
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setAddError(null)
 
@@ -95,22 +102,65 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
       return
     }
 
-    const res = store.addUser({
-      email: newEmail.trim(),
-      full_name: newName.trim(),
-      role: newRole,
-    })
-
-    if (!res.success) {
-      setAddError(res.error || 'Failed to add user.')
+    if (isApiMode && newPassword && newPassword.length < 8) {
+      setAddError('Initial password must be at least 8 characters long.')
       return
     }
 
-    onToast?.('success', `Added ${res.user?.full_name}.`)
-    setNewEmail('')
-    setNewName('')
-    setNewRole('marketing_intern')
-    setIsAddModalOpen(false)
+    if (!isApiMode) {
+      const res = store.addUser({
+        email: newEmail.trim(),
+        full_name: newName.trim(),
+        role: newRole,
+      })
+
+      if (!res.success) {
+        setAddError(res.error || 'Failed to add user.')
+        return
+      }
+
+      onToast?.('success', `Added ${res.user?.full_name}.`)
+      setNewEmail('')
+      setNewName('')
+      setNewRole('marketing_intern')
+      setIsAddModalOpen(false)
+      return
+    }
+
+    setSavingMember(true)
+    try {
+      const res = await store.addUserAsync({
+        email: newEmail.trim(),
+        full_name: newName.trim(),
+        role: newRole,
+        ...(newPassword ? { password: newPassword } : {}),
+      })
+
+      if (!res.success) {
+        setAddError(res.error || 'Failed to add user.')
+        return
+      }
+
+      if (res.temporaryPassword) {
+        setCreatedCredentials((prev) => [
+          {
+            email: res.user?.email || newEmail.trim(),
+            role: res.user?.role || newRole,
+            temporary_password: res.temporaryPassword!,
+          },
+          ...prev,
+        ])
+      }
+
+      onToast?.('success', `Added ${res.user?.full_name || newEmail.trim()}.`)
+      setNewEmail('')
+      setNewName('')
+      setNewPassword('')
+      setNewRole('marketing_intern')
+      setIsAddModalOpen(false)
+    } finally {
+      setSavingMember(false)
+    }
   }
 
   const handleCsvTextChange = (text: string) => {
@@ -147,14 +197,42 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
     URL.revokeObjectURL(url)
   }
 
-  const handleExecuteCsvImport = () => {
+  const handleExecuteCsvImport = async () => {
     if (!csvAnalysis || csvAnalysis.validRows.length === 0) return
 
-    const result = store.importUsers(csvAnalysis.validRows)
-    onToast?.('success', `Import complete: ${result.imported} created, ${result.updated} updated.`)
-    setIsCsvModalOpen(false)
-    setCsvRawText('')
-    setCsvAnalysis(null)
+    if (!isApiMode) {
+      const result = store.importUsers(csvAnalysis.validRows)
+      onToast?.('success', `Import complete: ${result.imported} created, ${result.updated} updated.`)
+      setIsCsvModalOpen(false)
+      setCsvRawText('')
+      setCsvAnalysis(null)
+      return
+    }
+
+    setImportingCsv(true)
+    try {
+      const result = await store.importUsersAsync(csvAnalysis.validRows)
+      if (result.error) {
+        onToast?.('error', result.error)
+        return
+      }
+      if (result.createdCredentials && result.createdCredentials.length > 0) {
+        setCreatedCredentials((prev) => [
+          ...result.createdCredentials!.map((c) => ({
+            email: c.email,
+            role: c.role,
+            temporary_password: c.temporary_password,
+          })),
+          ...prev,
+        ])
+      }
+      onToast?.('success', `Import complete: ${result.imported} created, ${result.updated} updated.`)
+      setIsCsvModalOpen(false)
+      setCsvRawText('')
+      setCsvAnalysis(null)
+    } finally {
+      setImportingCsv(false)
+    }
   }
 
   const inputClass =
@@ -207,6 +285,35 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
           </button>
         </div>
       </div>
+
+      {createdCredentials.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold">
+              One-Time Temporary Passwords (share securely with new team members)
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreatedCredentials([])}
+              className="rounded px-2 py-0.5 text-[11px] font-medium hover:bg-amber-200/70 dark:hover:bg-amber-900/60"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="mt-2 space-y-1 font-mono text-[11px]">
+            {createdCredentials.map((cred) => (
+              <div key={cred.email} className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{cred.email}</span>
+                <span className="text-slate-600 dark:text-slate-400">({formatRoleLabel(cred.role)})</span>
+                <span>→</span>
+                <code className="rounded bg-white px-2 py-0.5 text-slate-900 dark:bg-slate-900 dark:text-amber-300">
+                  {cred.temporary_password}
+                </code>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="relative max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -337,9 +444,10 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
             <button
               type="submit"
               form="addUserForm"
-              className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300"
+              disabled={savingMember}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
             >
-              Save Member
+              {savingMember ? 'Saving...' : 'Save Member'}
             </button>
           </>
         }
@@ -408,6 +516,25 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
               <option value="administrator">Administrator (Full control)</option>
             </select>
           </div>
+
+          {isApiMode && (
+            <div>
+              <label
+                htmlFor="new-member-password"
+                className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                Initial Password (optional)
+              </label>
+              <input
+                id="new-member-password"
+                type="password"
+                placeholder="Leave blank to generate a temporary password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          )}
         </form>
       </ModalShell>
 
@@ -428,11 +555,13 @@ export function UserManagement({ users, currentUserId, onToast }: UserManagement
             </button>
             <button
               type="button"
-              disabled={!csvAnalysis || csvAnalysis.validRows.length === 0}
-              onClick={handleExecuteCsvImport}
+              disabled={!csvAnalysis || csvAnalysis.validRows.length === 0 || importingCsv}
+              onClick={() => void handleExecuteCsvImport()}
               className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Import {csvAnalysis?.validRows.length || 0} Members
+              {importingCsv
+                ? 'Importing...'
+                : `Import ${csvAnalysis?.validRows.length || 0} Members`}
             </button>
           </>
         }

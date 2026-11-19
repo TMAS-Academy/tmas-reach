@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { store } from './lib/store'
 import { useAppStore } from './lib/useAppStore'
-import type { UserRole } from './types'
+import { apiClient } from './lib/apiClient'
+import { getAuthStatus, logoutSession, restoreSession } from './lib/authSession'
+import type { User, UserRole } from './types'
 import { Navbar, type TabKey } from './components/layout/Navbar'
+import { LoginView } from './components/auth/LoginView'
+import { ChangePasswordModal } from './components/auth/ChangePasswordModal'
 import {
   ToastContainer,
   MAX_VISIBLE_TOASTS,
@@ -20,7 +24,7 @@ import { ActivityLogs } from './components/analytics/ActivityLogs'
 import { UserManagement } from './components/admin/UserManagement'
 import { UnsubscribePortal } from './components/unsubscribe/UnsubscribePortal'
 import { SurveyHub } from './components/survey/SurveyHub'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, RefreshCw, X } from 'lucide-react'
 import './App.css'
 
 const VALID_TABS = new Set<TabKey>([
@@ -36,6 +40,9 @@ const VALID_TABS = new Set<TabKey>([
 
 function readTabFromUrl(): TabKey {
   try {
+    if (window.location.pathname.startsWith('/unsubscribe/')) {
+      return 'unsubscribe'
+    }
     const param = new URLSearchParams(window.location.search).get('tab') as TabKey | null
     if (param && VALID_TABS.has(param)) {
       return param
@@ -47,6 +54,7 @@ function readTabFromUrl(): TabKey {
 }
 
 export default function App() {
+  const isApiConfigured = apiClient.isConfigured()
   const snapshot = useAppStore()
   const { currentUser, contacts, templates, campaigns, logs, users, surveys, storageError } =
     snapshot
@@ -55,6 +63,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [authState, setAuthState] = useState<'checking' | 'unauthenticated' | 'authenticated'>(
+    isApiConfigured ? 'checking' : 'authenticated'
+  )
+  const [authInitialized, setAuthInitialized] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
   const [isDark, setIsDark] = useState(() => {
     try {
       const urlTheme = new URLSearchParams(window.location.search).get('theme')
@@ -68,6 +82,8 @@ export default function App() {
     }
   })
 
+  const isApiMode = isApiConfigured && authState === 'authenticated' && store.isApiMode()
+
   const addToast = useCallback((type: ToastType, text: string) => {
     setToasts((prev) => [
       ...prev.slice(-(MAX_VISIBLE_TOASTS - 1)),
@@ -78,6 +94,48 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
+
+  const bootstrapAuthSession = useCallback(async () => {
+    if (!isApiConfigured) return
+    setAuthState('checking')
+    setAuthError(null)
+    try {
+      const [status, restoredUser] = await Promise.all([getAuthStatus(), restoreSession()])
+      setAuthInitialized(status.initialized)
+      if (restoredUser) {
+        store.setApiMode(true, restoredUser)
+        setAuthState('authenticated')
+        void store.hydrateFromApi()
+      } else {
+        store.setApiMode(false)
+        setAuthState('unauthenticated')
+      }
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : 'Unable to connect to the TMAS Reach API server.'
+      )
+      setAuthState('unauthenticated')
+    }
+  }, [isApiConfigured])
+
+  useEffect(() => {
+    if (!isApiConfigured) return
+    const timer = setTimeout(() => {
+      void bootstrapAuthSession()
+    }, 0)
+
+    const unsubUnauthorized = apiClient.onUnauthorized(() => {
+      logoutSession()
+      store.setApiMode(false)
+      setAuthState('unauthenticated')
+      addToast('error', 'Your session expired. Please sign in again.')
+    })
+
+    return () => {
+      clearTimeout(timer)
+      unsubUnauthorized()
+    }
+  }, [isApiConfigured, bootstrapAuthSession, addToast])
 
   useEffect(() => {
     try {
@@ -102,6 +160,12 @@ export default function App() {
 
   useEffect(() => {
     const url = new URL(window.location.href)
+    if (activeTab === 'unsubscribe' && url.pathname.startsWith('/unsubscribe/')) {
+      return
+    }
+    if (activeTab !== 'unsubscribe' && url.pathname.startsWith('/unsubscribe/')) {
+      url.pathname = '/'
+    }
     if (url.searchParams.get('tab') !== activeTab) {
       url.searchParams.set('tab', activeTab)
       if (activeTab !== 'unsubscribe') {
@@ -120,6 +184,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (isApiConfigured && authState !== 'authenticated') return
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -128,7 +193,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [isApiConfigured, authState])
 
   const pendingApprovalsCount = useMemo(
     () => campaigns.filter((c) => c.status === 'pending_approval').length,
@@ -158,10 +223,102 @@ export default function App() {
     }
   }
 
+  const handleAuthenticated = (user: User, isBootstrap: boolean) => {
+    setAuthInitialized(true)
+    setAuthError(null)
+    store.setApiMode(true, user)
+    setAuthState('authenticated')
+    if (user.role !== 'administrator' && activeTab === 'admin') {
+      setActiveTab('contacts')
+    }
+    void store.hydrateFromApi()
+    addToast(
+      'success',
+      isBootstrap ? 'Administrator account created.' : `Signed in as ${user.full_name}.`
+    )
+  }
+
+  const handleSignOut = () => {
+    logoutSession()
+    store.setApiMode(false)
+    setAuthState('unauthenticated')
+    setActiveTab('contacts')
+    addToast('info', 'Signed out.')
+  }
+
   const handleResetConfirmed = () => {
     store.resetToDefault()
     setShowResetConfirm(false)
     addToast('info', 'Demo data restored to defaults')
+  }
+
+  if (isApiConfigured && authState !== 'authenticated') {
+    if (activeTab === 'unsubscribe') {
+      return (
+        <div className="min-h-screen bg-slate-50 px-4 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+          <UnsubscribePortal
+            contacts={contacts}
+            onBack={() => setActiveTab('contacts')}
+            backLabel="Back to Sign In"
+          />
+          <ToastContainer toasts={toasts} onDismiss={removeToast} />
+        </div>
+      )
+    }
+
+    if (authState === 'checking') {
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex items-center justify-center p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <RefreshCw className="h-4 w-4 animate-spin text-amber-500" />
+            <span>Connecting to TMAS Reach API...</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (authError) {
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-lg dark:border-slate-800 dark:bg-slate-900 space-y-4">
+            <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+            <h1 className="text-base font-bold text-slate-900 dark:text-white">
+              API Server Unreachable
+            </h1>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{authError}</p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => void bootstrapAuthSession()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Retry Connection
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('unsubscribe')}
+                className="rounded-lg border border-slate-300 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Unsubscribe Portal
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <>
+        <LoginView
+          initialized={authInitialized}
+          isDark={isDark}
+          onToggleTheme={() => setIsDark((d) => !d)}
+          onAuthenticated={handleAuthenticated}
+          onOpenUnsubscribe={() => setActiveTab('unsubscribe')}
+        />
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
+      </>
+    )
   }
 
   return (
@@ -180,6 +337,10 @@ export default function App() {
         onOpenCommandPalette={() => setShowPalette(true)}
         pendingApprovalsCount={pendingApprovalsCount}
         pendingSurveysCount={pendingSurveysCount}
+        isApiMode={isApiMode}
+        onSignOut={handleSignOut}
+        onOpenChangePassword={() => setShowChangePassword(true)}
+        onSyncNow={() => void store.hydrateFromApi()}
         onSelectUser={(userId) => {
           store.setCurrentUser(userId)
           const target = users.find((u) => u.id === userId)
@@ -219,10 +380,14 @@ export default function App() {
         <ErrorBoundary
           scope="Current View"
           resetKey={activeTab}
-          onResetData={() => {
-            store.resetToDefault()
-            addToast('info', 'Local data reset to defaults')
-          }}
+          onResetData={
+            isApiMode
+              ? undefined
+              : () => {
+                  store.resetToDefault()
+                  addToast('info', 'Local data reset to defaults')
+                }
+          }
         >
           {activeTab === 'contacts' && (
             <ContactList
@@ -284,13 +449,15 @@ export default function App() {
               {currentUser.full_name}
             </strong>
           </span>
-          <button
-            type="button"
-            onClick={() => setShowResetConfirm(true)}
-            className="text-slate-600 underline hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 rounded"
-          >
-            Reset demo data
-          </button>
+          {!isApiMode && (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              className="text-slate-600 underline hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 rounded"
+            >
+              Reset demo data
+            </button>
+          )}
         </div>
       </footer>
 
@@ -301,21 +468,34 @@ export default function App() {
         isAdmin={currentUser.role === 'administrator'}
         isDark={isDark}
         onToggleTheme={() => setIsDark((d) => !d)}
-        onRequestReset={() => setShowResetConfirm(true)}
+        onRequestReset={isApiMode ? undefined : () => setShowResetConfirm(true)}
         contacts={contacts}
         templates={templates}
         campaigns={campaigns}
       />
 
-      <ConfirmDialog
-        isOpen={showResetConfirm}
-        title="Reset local workspace data?"
-        message="This will clear added contacts, campaigns, intake submissions, and custom templates, restoring the default seed state."
-        confirmLabel="Reset data"
-        tone="warning"
-        onConfirm={handleResetConfirmed}
-        onCancel={() => setShowResetConfirm(false)}
-      />
+      {!isApiMode && (
+        <ConfirmDialog
+          isOpen={showResetConfirm}
+          title="Reset local workspace data?"
+          message="This will clear added contacts, campaigns, intake submissions, and custom templates, restoring the default seed state."
+          confirmLabel="Reset data"
+          tone="warning"
+          onConfirm={handleResetConfirmed}
+          onCancel={() => setShowResetConfirm(false)}
+        />
+      )}
+
+      {isApiMode && (
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => setShowChangePassword(false)}
+          onSuccess={() => {
+            setShowChangePassword(false)
+            addToast('success', 'Password updated.')
+          }}
+        />
+      )}
 
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>

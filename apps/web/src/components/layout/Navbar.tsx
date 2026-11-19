@@ -62,6 +62,7 @@ export function Navbar({
   isApiMode = false,
   onSignOut,
   onOpenChangePassword,
+  onSyncNow,
 }: NavbarProps) {
   const isAdmin = currentUser.role === 'administrator'
 
@@ -132,7 +133,7 @@ export function Navbar({
               TMAS Reach
             </span>
           </button>
-          <ConnectionBadge />
+          <ConnectionBadge onRefresh={onSyncNow} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

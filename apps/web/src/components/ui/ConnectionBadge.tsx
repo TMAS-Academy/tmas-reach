@@ -4,9 +4,10 @@ import { Cloud, HardDrive, RefreshCw, WifiOff } from 'lucide-react'
 
 interface ConnectionBadgeProps {
   client?: ApiClient
+  onRefresh?: () => void
 }
 
-export function ConnectionBadge({ client = apiClient }: ConnectionBadgeProps) {
+export function ConnectionBadge({ client = apiClient, onRefresh }: ConnectionBadgeProps) {
   const configured = client.isConfigured()
   const [status, setStatus] = useState<'checking' | 'connected' | 'local' | 'fallback'>(
     configured ? 'checking' : 'local'
@@ -30,11 +31,12 @@ export function ConnectionBadge({ client = apiClient }: ConnectionBadgeProps) {
       setDetail(
         `API connected (${client.getBaseUrl()})${res.latencyMs !== undefined ? ` • ${res.latencyMs}ms` : ''}`
       )
+      onRefresh?.()
     } else {
       setStatus('fallback')
       setDetail(`API unreachable (${res.error || 'offline'}). Using local browser storage.`)
     }
-  }, [client])
+  }, [client, onRefresh])
 
   useEffect(() => {
     if (!configured) return

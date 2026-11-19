@@ -9,6 +9,7 @@ import type {
   UserRole,
 } from '../types'
 import type { SurveySubmission } from '../types/survey'
+import { apiClient, type ApiClient } from './apiClient'
 import { validateCampaignPreApproval } from './templateEngine'
 
 export const MAX_ACTIVITY_LOGS = 500
@@ -35,6 +36,33 @@ export interface AppStoreSnapshot {
   readonly logs: ActivityLog[]
   readonly surveys: SurveySubmission[]
   readonly storageError: string | null
+}
+
+function escapeCsvField(value: string | undefined): string {
+  const str = value ?? ''
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function buildContactsCsv(rows: Partial<Contact>[]): string {
+  const header = 'email,first_name,last_name,organization,district,job_role,audience_tag,notes'
+  const lines = rows
+    .filter((r) => Boolean(r.email?.trim()))
+    .map((r) =>
+      [
+        escapeCsvField(r.email?.trim()),
+        escapeCsvField(r.first_name),
+        escapeCsvField(r.last_name),
+        escapeCsvField(r.organization),
+        escapeCsvField(r.district),
+        escapeCsvField(r.job_role),
+        escapeCsvField(r.audience_tag),
+        escapeCsvField(r.notes),
+      ].join(',')
+    )
+  return [header, ...lines].join('\n')
 }
 
 function cloneData<T>(value: T): T {
@@ -198,6 +226,8 @@ export class AppStore {
   private storageErrorListeners: Set<(message: string) => void> = new Set()
   private cachedSnapshot: AppStoreSnapshot | null = null
   private readonly boundStorageHandler: ((event: StorageEvent) => void) | null = null
+  private apiMode = false
+  private client: ApiClient = apiClient
 
   constructor() {
     this.users = this.loadOrSeed(STORAGE_KEYS.users, SEED_USERS)
@@ -226,6 +256,7 @@ export class AppStore {
   }
 
   private handleStorageEvent(event: StorageEvent) {
+    if (this.apiMode) return
     if (event.key !== null && !STORAGE_KEY_SET.has(event.key)) {
       return
     }
@@ -266,7 +297,164 @@ export class AppStore {
     localStorage.setItem(STORAGE_KEYS.surveys, JSON.stringify(this.surveys))
   }
 
+  private reportSyncError(message: string) {
+    this.storageError = message
+    this.storageErrorListeners.forEach((listener) => listener(message))
+    this.invalidateAndNotify()
+  }
+
+  private runApiSync(task: () => Promise<unknown>, refreshAfter = true) {
+    void task()
+      .then(async () => {
+        if (refreshAfter && this.apiMode) {
+          await this.hydrateFromApi()
+        }
+      })
+      .catch(async (err) => {
+        const msg = err instanceof Error ? err.message : 'Unable to sync change with the API server.'
+        this.reportSyncError(msg)
+        if (this.apiMode) {
+          await this.hydrateFromApi()
+        }
+      })
+  }
+
+  public setApiClient(client: ApiClient) {
+    this.client = client
+  }
+
+  public isApiMode(): boolean {
+    return this.apiMode
+  }
+
+  public setApiMode(enabled: boolean, authenticatedUser?: User) {
+    this.apiMode = enabled
+    this.storageError = null
+
+    if (enabled) {
+      if (authenticatedUser) {
+        this.currentUser = authenticatedUser
+        this.users = [authenticatedUser]
+      }
+      this.contacts = []
+      this.templates = []
+      this.campaigns = []
+      this.recipients = []
+      this.logs = []
+      this.surveys = []
+      this.invalidateAndNotify()
+      return
+    }
+
+    this.users = this.loadOrSeed(STORAGE_KEYS.users, SEED_USERS)
+    this.currentUser = this.users[0] ?? cloneData(SEED_USERS[0])
+    this.contacts = this.loadOrSeed(STORAGE_KEYS.contacts, SEED_CONTACTS)
+    this.templates = this.loadOrSeed(STORAGE_KEYS.templates, SEED_TEMPLATES)
+    this.campaigns = this.loadOrSeed(STORAGE_KEYS.campaigns, SEED_CAMPAIGNS)
+    this.recipients = this.loadOrSeed(STORAGE_KEYS.recipients, [])
+    this.logs = this.loadOrSeed(STORAGE_KEYS.logs, SEED_LOGS).slice(0, MAX_ACTIVITY_LOGS)
+    this.surveys = this.loadOrSeed(STORAGE_KEYS.surveys, [])
+    this.invalidateAndNotify()
+  }
+
+  public async hydrateFromApi(client: ApiClient = this.client): Promise<{ ok: boolean; error?: string }> {
+    if (!client.isConfigured()) {
+      return { ok: false, error: 'API base URL is not configured.' }
+    }
+
+    try {
+      const contactsAll: Contact[] = []
+      let page = 1
+      let totalPages = 1
+      while (page <= totalPages && page <= 50) {
+        const contactRes = await client.get<{
+          items: Contact[]
+          pagination?: { totalPages?: number }
+        }>(`/api/contacts?page=${page}&limit=200`)
+        contactsAll.push(...(contactRes.items || []))
+        totalPages = contactRes.pagination?.totalPages ?? 1
+        page++
+      }
+
+      const [templatesRaw, campaignsRaw, recipientsRaw, surveysRaw, logsRes] = await Promise.all([
+        client.get<Array<Partial<EmailTemplate> & { id: string; name: string; subject_template: string }>>(
+          '/api/templates'
+        ),
+        client.get<
+          Array<
+            Omit<Campaign, 'scheduled_for'> & {
+              scheduled_at?: string
+              scheduled_for?: string
+            }
+          >
+        >('/api/campaigns'),
+        client.get<Array<Omit<CampaignRecipient, 'created_at'> & { created_at?: string }>>(
+          '/api/recipients'
+        ),
+        client.get<SurveySubmission[]>('/api/surveys'),
+        client.get<{ items: Array<Omit<ActivityLog, 'actor_name'> & { actor_name?: string }> }>(
+          '/api/logs?page=1&limit=200'
+        ),
+      ])
+
+      let usersList: User[] = [this.currentUser]
+      if (this.currentUser.role === 'administrator') {
+        try {
+          usersList = await client.get<User[]>('/api/users')
+        } catch {
+          usersList = [this.currentUser]
+        }
+      }
+
+      const matchedSelf = usersList.find((u) => u.id === this.currentUser.id)
+      if (matchedSelf) {
+        this.currentUser = matchedSelf
+      }
+
+      this.users = usersList
+      this.contacts = contactsAll
+      this.templates = (templatesRaw || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        subject_template: t.subject_template,
+        body_html: t.body_html ?? '',
+        body_text: t.body_text ?? '',
+        created_by: t.created_by,
+        created_at: t.created_at ?? new Date().toISOString(),
+        updated_at: t.updated_at ?? new Date().toISOString(),
+      }))
+      this.campaigns = (campaignsRaw || []).map((c) => ({
+        ...c,
+        scheduled_for: c.scheduled_for ?? c.scheduled_at,
+      }))
+      this.recipients = (recipientsRaw || []).map((r) => ({
+        ...r,
+        created_at: r.created_at ?? r.sent_at ?? r.delivered_at ?? new Date().toISOString(),
+      }))
+      this.surveys = surveysRaw || []
+      this.logs = (logsRes.items || [])
+        .map((l) => ({
+          ...l,
+          actor_name: l.actor_name || l.actor_id || 'System',
+        }))
+        .slice(0, MAX_ACTIVITY_LOGS)
+      this.storageError = null
+      this.invalidateAndNotify()
+      return { ok: true }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load workspace data from API.'
+      this.reportSyncError(msg)
+      return { ok: false, error: msg }
+    }
+  }
+
   private save() {
+    if (this.apiMode) {
+      this.storageError = null
+      this.invalidateAndNotify()
+      return
+    }
+
     let errorMessage: string | null = null
     try {
       this.writeToStorage()
@@ -383,6 +571,7 @@ export class AppStore {
     email: string
     full_name: string
     role: UserRole
+    password?: string
   }): { success: boolean; user?: User; error?: string } {
     const emailNorm = data.email.trim().toLowerCase()
     if (!emailNorm) {
@@ -406,7 +595,40 @@ export class AppStore {
     this.users = [...this.users, newUser]
     this.logActivity('user_created', 'user', newUser.id, { email: emailNorm, role: data.role })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post('/api/users', data))
+    }
     return { success: true, user: newUser }
+  }
+
+  public async addUserAsync(data: {
+    email: string
+    full_name: string
+    role: UserRole
+    password?: string
+  }): Promise<{ success: boolean; user?: User; temporaryPassword?: string; error?: string }> {
+    if (!this.apiMode) {
+      return this.addUser(data)
+    }
+
+    try {
+      const res = await this.client.post<{ user: User; temporary_password?: string }>(
+        '/api/users',
+        data,
+        { maxRetries: 0 }
+      )
+      await this.hydrateFromApi()
+      return {
+        success: true,
+        user: res.user,
+        temporaryPassword: res.temporary_password,
+      }
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to create team member.',
+      }
+    }
   }
 
   public deleteUser(userId: string): { success: boolean; error?: string } {
@@ -427,6 +649,9 @@ export class AppStore {
 
     this.logActivity('user_deleted', 'user', userId, { email: user.email })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.delete(`/api/users/${encodeURIComponent(userId)}`))
+    }
     return { success: true }
   }
 
@@ -481,9 +706,51 @@ export class AppStore {
       }
       this.logActivity('team_csv_imported', 'user', undefined, { imported, updated })
       this.save()
+      if (this.apiMode) {
+        this.runApiSync(() => this.client.post('/api/users/import', { rows }))
+      }
     }
 
     return { imported, updated }
+  }
+
+  public async importUsersAsync(
+    rows: { email: string; full_name?: string; role?: UserRole }[]
+  ): Promise<{
+    imported: number
+    updated: number
+    createdCredentials?: Array<{
+      email: string
+      full_name: string
+      role: UserRole
+      temporary_password: string
+    }>
+    error?: string
+  }> {
+    if (!this.apiMode) {
+      return this.importUsers(rows)
+    }
+
+    try {
+      const res = await this.client.post<{
+        imported: number
+        updated: number
+        createdCredentials?: Array<{
+          email: string
+          full_name: string
+          role: UserRole
+          temporary_password: string
+        }>
+      }>('/api/users/import', { rows }, { maxRetries: 0 })
+      await this.hydrateFromApi()
+      return res
+    } catch (err) {
+      return {
+        imported: 0,
+        updated: 0,
+        error: err instanceof Error ? err.message : 'Failed to import team roster.',
+      }
+    }
   }
 
   public updateUserRole(userId: string, newRole: UserRole): { success: boolean; error?: string } {
@@ -507,6 +774,11 @@ export class AppStore {
     }
     this.logActivity('user_role_updated', 'user', userId, { newRole })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.patch(`/api/users/${encodeURIComponent(userId)}`, { role: newRole })
+      )
+    }
     return { success: true }
   }
 
@@ -536,6 +808,14 @@ export class AppStore {
     this.contacts = [newContact, ...this.contacts]
     this.logActivity('contact_created', 'contact', newContact.id, { email: emailNorm })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post('/api/contacts', {
+          ...contactData,
+          email: emailNorm,
+        })
+      )
+    }
     return { success: true }
   }
 
@@ -563,6 +843,9 @@ export class AppStore {
     )
     this.logActivity('contact_updated', 'contact', id, updates)
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.patch(`/api/contacts/${encodeURIComponent(id)}`, updates))
+    }
     return { success: true }
   }
 
@@ -572,6 +855,28 @@ export class AppStore {
     )
     this.logActivity('contact_status_changed', 'contact', id, { status })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.patch(`/api/contacts/${encodeURIComponent(id)}`, { status })
+      )
+    }
+  }
+
+  public setContactsStatus(ids: string[], status: ContactStatus) {
+    if (ids.length === 0) return
+    const idSet = new Set(ids)
+    const now = new Date().toISOString()
+    this.contacts = this.contacts.map((c) =>
+      idSet.has(c.id) ? { ...c, status, updated_at: now } : c
+    )
+    this.logActivity('contacts_bulk_status_updated', 'contact', undefined, {
+      status,
+      count: ids.length,
+    })
+    this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post('/api/contacts/bulk-status', { ids, status }))
+    }
   }
 
   public deleteContact(id: string): { success: boolean } {
@@ -582,6 +887,9 @@ export class AppStore {
     this.recipients = this.recipients.filter((r) => r.contact_id !== id)
     this.logActivity('contact_deleted', 'contact', id, { email: contact.email })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.delete(`/api/contacts/${encodeURIComponent(id)}`))
+    }
     return { success: true }
   }
 
@@ -594,6 +902,9 @@ export class AppStore {
     if (deletedCount > 0) {
       this.logActivity('contacts_bulk_deleted', 'contact', undefined, { count: deletedCount })
       this.save()
+      if (this.apiMode) {
+        this.runApiSync(() => this.client.post('/api/contacts/bulk-delete', { ids }))
+      }
     }
     return { count: deletedCount }
   }
@@ -654,6 +965,15 @@ export class AppStore {
     this.contacts = nextContacts
     this.logActivity('csv_imported', 'contact', undefined, { count: importedCount })
     this.save()
+    if (this.apiMode && rows.length > 0) {
+      const csvContent = buildContactsCsv(rows)
+      this.runApiSync(() =>
+        this.client.post('/api/contacts/import', {
+          csvContent,
+          updateEmptyFields: allowEmptyUpdate,
+        })
+      )
+    }
     return importedCount
   }
 
@@ -673,6 +993,9 @@ export class AppStore {
     this.templates = [newTemplate, ...this.templates]
     this.logActivity('template_created', 'template', newTemplate.id, { name: templateData.name })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post('/api/templates', templateData))
+    }
     return newTemplate
   }
 
@@ -701,6 +1024,11 @@ export class AppStore {
       duplicated_from: original.id,
     })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post(`/api/templates/${encodeURIComponent(templateId)}/duplicate`)
+      )
+    }
     return { success: true, template: newTemplate }
   }
 
@@ -710,6 +1038,9 @@ export class AppStore {
     )
     this.logActivity('template_updated', 'template', id, updates)
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.patch(`/api/templates/${encodeURIComponent(id)}`, updates))
+    }
   }
 
   public deleteTemplate(id: string): { success: boolean; error?: string } {
@@ -731,6 +1062,9 @@ export class AppStore {
     this.templates = this.templates.filter((t) => t.id !== id)
     this.logActivity('template_deleted', 'template', id, { name: existing.name })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.delete(`/api/templates/${encodeURIComponent(id)}`))
+    }
     return { success: true }
   }
 
@@ -753,6 +1087,17 @@ export class AppStore {
     this.campaigns = [newCampaign, ...this.campaigns]
     this.logActivity('campaign_created', 'campaign', newCampaign.id, { name: campaignData.name })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post('/api/campaigns', {
+          name: campaignData.name,
+          template_id: campaignData.template_id,
+          target_audience_tag: campaignData.target_audience_tag || 'all',
+          batch_size: campaignData.batch_size,
+          scheduled_at: campaignData.scheduled_for,
+        })
+      )
+    }
     return newCampaign
   }
 
@@ -779,6 +1124,9 @@ export class AppStore {
     )
     this.logActivity('campaign_updated', 'campaign', id, updates)
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.patch(`/api/campaigns/${encodeURIComponent(id)}`, updates))
+    }
     return { success: true }
   }
 
@@ -795,6 +1143,9 @@ export class AppStore {
     )
     this.logActivity('campaign_reopened', 'campaign', id)
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post(`/api/campaigns/${encodeURIComponent(id)}/reopen`))
+    }
     return { success: true }
   }
 
@@ -812,7 +1163,9 @@ export class AppStore {
     const activeContactsCount = this.contacts.filter(
       (c) =>
         c.status === 'active' &&
-        (!campaign.target_audience_tag || c.audience_tag === campaign.target_audience_tag)
+        (!campaign.target_audience_tag ||
+          campaign.target_audience_tag === 'all' ||
+          c.audience_tag === campaign.target_audience_tag)
     ).length
 
     const validation = validateCampaignPreApproval(template, activeContactsCount)
@@ -825,6 +1178,9 @@ export class AppStore {
     )
     this.logActivity('campaign_submitted', 'campaign', id)
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post(`/api/campaigns/${encodeURIComponent(id)}/submit`))
+    }
     return { success: true, errors: [] }
   }
 
@@ -856,7 +1212,9 @@ export class AppStore {
       const eligibleContacts = this.contacts.filter(
         (c) =>
           c.status === 'active' &&
-          (!campaign.target_audience_tag || c.audience_tag === campaign.target_audience_tag)
+          (!campaign.target_audience_tag ||
+            campaign.target_audience_tag === 'all' ||
+            c.audience_tag === campaign.target_audience_tag)
       )
 
       const newRecipients: CampaignRecipient[] = []
@@ -886,6 +1244,14 @@ export class AppStore {
       { review_notes: notes }
     )
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post(`/api/campaigns/${encodeURIComponent(id)}/review`, {
+          action: decision === 'approved' ? 'approve' : 'reject',
+          review_notes: notes,
+        })
+      )
+    }
     return { success: true }
   }
 
@@ -903,6 +1269,11 @@ export class AppStore {
     const template = this.templates.find((t) => t.id === campaign.template_id)
     if (!template) {
       return { sentCount: 0, errors: ['Associated template not found'] }
+    }
+
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post(`/api/campaigns/${encodeURIComponent(id)}/dispatch`))
+      return { sentCount: 0, errors: [] }
     }
 
     const now = new Date().toISOString()
@@ -957,6 +1328,79 @@ export class AppStore {
     this.logActivity('batch_dispatched', 'campaign', id, { sentCount })
     this.save()
     return { sentCount, errors: [] }
+  }
+
+  public async dispatchCampaignBatchAsync(
+    id: string
+  ): Promise<{ sentCount: number; skippedSuppressed?: number; failedCount?: number; errors: string[] }> {
+    if (!this.apiMode) {
+      return this.dispatchCampaignBatch(id)
+    }
+
+    try {
+      const res = await this.client.post<{
+        dispatch: {
+          emailsSent: number
+          skippedSuppressed: number
+          failedCount: number
+        }
+      }>(`/api/campaigns/${encodeURIComponent(id)}/dispatch`, undefined, { maxRetries: 0 })
+      await this.hydrateFromApi()
+      return {
+        sentCount: res.dispatch.emailsSent,
+        skippedSuppressed: res.dispatch.skippedSuppressed,
+        failedCount: res.dispatch.failedCount,
+        errors: [],
+      }
+    } catch (err) {
+      return {
+        sentCount: 0,
+        errors: [err instanceof Error ? err.message : 'Failed to dispatch batch.'],
+      }
+    }
+  }
+
+  public async sendTestEmail(
+    campaignId: string,
+    to?: string
+  ): Promise<{
+    success: boolean
+    to: string
+    messageId?: string
+    providerMode: 'resend' | 'mock' | 'local'
+    error?: string
+  }> {
+    const targetEmail = to?.trim() || this.currentUser.email
+    if (!this.apiMode) {
+      return {
+        success: true,
+        to: targetEmail,
+        providerMode: 'local',
+      }
+    }
+
+    try {
+      const res = await this.client.post<{
+        success: boolean
+        to: string
+        messageId?: string
+        providerMode: 'resend' | 'mock'
+        error?: string
+      }>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/test-send`,
+        { to: targetEmail },
+        { maxRetries: 0 }
+      )
+      await this.hydrateFromApi()
+      return res
+    } catch (err) {
+      return {
+        success: false,
+        to: targetEmail,
+        providerMode: 'mock',
+        error: err instanceof Error ? err.message : 'Failed to send test email.',
+      }
+    }
   }
 
   public getAllRecipients(): CampaignRecipient[] {
@@ -1014,6 +1458,9 @@ export class AppStore {
     this.contacts = this.contacts.map((c) => (c.id === contact.id ? updatedContact : c))
     this.logActivity('contact_unsubscribed', 'contact', contact.id, { email: contact.email })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post('/unsubscribe', { token }, { skipAuth: true }))
+    }
     return { success: true, contact: updatedContact }
   }
 
@@ -1069,6 +1516,9 @@ export class AppStore {
       email: submission.email,
     })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() => this.client.post('/api/surveys', data, { skipAuth: true }))
+    }
     return submission
   }
 
@@ -1079,8 +1529,15 @@ export class AppStore {
     }
 
     const districtValue = (submission as SurveySubmission & { district?: string }).district
-    const res = this.addContact({
-      email: submission.email,
+    const emailNorm = submission.email.trim().toLowerCase()
+    if (this.contacts.some((c) => c.email.toLowerCase() === emailNorm)) {
+      return { success: false, error: `A contact with email "${emailNorm}" already exists.` }
+    }
+
+    const now = new Date().toISOString()
+    const newContact: Contact = {
+      id: generateId('cnt'),
+      email: emailNorm,
       first_name: submission.first_name,
       last_name: submission.last_name,
       organization: submission.organization,
@@ -1088,11 +1545,12 @@ export class AppStore {
       job_role: submission.job_role,
       audience_tag: submission.audience_tag,
       status: 'active',
-    })
-
-    if (!res.success) {
-      return res
+      unsubscribe_token: generateToken('tok'),
+      created_by: this.currentUser.id,
+      created_at: now,
+      updated_at: now,
     }
+    this.contacts = [newContact, ...this.contacts]
 
     this.surveys = this.surveys.map((s) =>
       s.id === submissionId ? { ...s, status: 'imported_to_contacts' } : s
@@ -1101,6 +1559,11 @@ export class AppStore {
       email: submission.email,
     })
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post(`/api/surveys/${encodeURIComponent(submissionId)}/promote`)
+      )
+    }
     return { success: true }
   }
 
@@ -1109,6 +1572,11 @@ export class AppStore {
       s.id === submissionId ? { ...s, status: 'archived' } : s
     )
     this.save()
+    if (this.apiMode) {
+      this.runApiSync(() =>
+        this.client.post(`/api/surveys/${encodeURIComponent(submissionId)}/archive`)
+      )
+    }
   }
 
   public resetToDefault() {

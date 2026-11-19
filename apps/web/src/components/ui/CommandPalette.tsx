@@ -33,7 +33,7 @@ interface CommandPaletteProps {
   isAdmin: boolean
   isDark: boolean
   onToggleTheme: () => void
-  onRequestReset: () => void
+  onRequestReset?: () => void
   contacts: Contact[]
   templates: EmailTemplate[]
   campaigns: Campaign[]
@@ -140,14 +140,18 @@ export function CommandPalette({
         icon: isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
         onSelect: onToggleTheme,
       },
-      {
-        id: 'act-reset',
-        group: 'Actions',
-        label: 'Reset Demo Data',
-        hint: 'Restore initial workspace state',
-        icon: <RotateCcw className="h-4 w-4" />,
-        onSelect: onRequestReset,
-      },
+      ...(onRequestReset
+        ? [
+            {
+              id: 'act-reset',
+              group: 'Actions' as const,
+              label: 'Reset Demo Data',
+              hint: 'Restore initial workspace state',
+              icon: <RotateCcw className="h-4 w-4" />,
+              onSelect: onRequestReset,
+            },
+          ]
+        : []),
     ]
 
     if (q) {
