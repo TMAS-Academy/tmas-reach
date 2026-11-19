@@ -235,7 +235,9 @@ export default function App() {
 
           {activeTab === 'intake' && <SurveyHub surveys={surveys} onToast={addToast} />}
 
-          {activeTab === 'templates' && <TemplateList templates={templates} />}
+          {activeTab === 'templates' && (
+            <TemplateList templates={templates} onToast={addToast} />
+          )}
 
           {activeTab === 'campaigns' && (
             <CampaignList
@@ -243,6 +245,7 @@ export default function App() {
               templates={templates}
               contacts={contacts}
               userRole={currentUser.role}
+              onToast={addToast}
             />
           )}
 

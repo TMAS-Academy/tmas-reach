@@ -1,20 +1,49 @@
-import { useState } from 'react'
-import type { EmailTemplate } from '../../types'
+import { useMemo, useState } from 'react'
+import type { Campaign, Contact, EmailTemplate } from '../../types'
 import { store } from '../../lib/store'
-import { X } from 'lucide-react'
+import { ModalShell } from '../ui/ModalShell'
+import { AlertTriangle, Users } from 'lucide-react'
 
 interface CampaignModalProps {
   templates: EmailTemplate[]
+  contacts: Contact[]
+  campaign?: Campaign | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (message: string) => void
 }
 
-export function CampaignModal({ templates, onClose, onSaved }: CampaignModalProps) {
-  const [name, setName] = useState('')
-  const [templateId, setTemplateId] = useState(templates[0]?.id || '')
-  const [targetAudienceTag, setTargetAudienceTag] = useState('high_school')
-  const [batchSize, setBatchSize] = useState(50)
+const DEFAULT_TAGS = ['high_school', 'middle_school', 'district_admin', 'educators', 'nonprofit']
+
+export function CampaignModal({
+  templates,
+  contacts,
+  campaign,
+  onClose,
+  onSaved,
+}: CampaignModalProps) {
+  const [name, setName] = useState(campaign?.name || '')
+  const [templateId, setTemplateId] = useState(campaign?.template_id || templates[0]?.id || '')
+  const [targetAudienceTag, setTargetAudienceTag] = useState(
+    campaign ? campaign.target_audience_tag || 'all' : 'all'
+  )
+  const [batchSize, setBatchSize] = useState(campaign?.batch_size || 50)
   const [error, setError] = useState<string | null>(null)
+
+  const audienceTags = useMemo(() => {
+    const tagSet = new Set<string>(DEFAULT_TAGS)
+    contacts.forEach((c) => {
+      if (c.audience_tag?.trim()) tagSet.add(c.audience_tag.trim())
+    })
+    return Array.from(tagSet).sort()
+  }, [contacts])
+
+  const eligibleActiveCount = useMemo(() => {
+    return contacts.filter(
+      (c) =>
+        c.status === 'active' &&
+        (targetAudienceTag === 'all' || c.audience_tag === targetAudienceTag)
+    ).length
+  }, [contacts, targetAudienceTag])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,65 +58,114 @@ export function CampaignModal({ templates, onClose, onSaved }: CampaignModalProp
       return
     }
     if (batchSize <= 0 || batchSize > 500) {
-      setError('Batch size must be between 1 and 500 recipients per ESP limit.')
+      setError('Batch size must be between 1 and 500 recipients.')
       return
     }
 
-    store.addCampaign({
-      name: name.trim(),
-      template_id: templateId,
-      target_audience_tag: targetAudienceTag === 'all' ? undefined : targetAudienceTag,
-      batch_size: batchSize,
-      created_by: store.getCurrentUser().id,
-    })
-
-    onSaved()
+    if (campaign) {
+      const res = store.updateCampaign(campaign.id, {
+        name: name.trim(),
+        template_id: templateId,
+        target_audience_tag: targetAudienceTag === 'all' ? undefined : targetAudienceTag,
+        batch_size: batchSize,
+      })
+      if (!res.success) {
+        setError(res.error || 'Failed to update campaign.')
+        return
+      }
+      onSaved('Campaign updated and set to draft.')
+    } else {
+      store.addCampaign({
+        name: name.trim(),
+        template_id: templateId,
+        target_audience_tag: targetAudienceTag === 'all' ? undefined : targetAudienceTag,
+        batch_size: batchSize,
+        created_by: store.getCurrentUser().id,
+      })
+      onSaved('Draft campaign created.')
+    }
   }
 
+  const inputClass =
+    'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Create Outreach Campaign
-          </h3>
+    <ModalShell
+      onClose={onClose}
+      title={campaign ? 'Edit Campaign' : 'Create Outreach Campaign'}
+      subtitle="Campaigns start in draft and require Lead or Administrator approval before dispatch."
+      size="md"
+      footer={
+        <>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
           >
-            <X className="h-5 w-5" />
+            Cancel
           </button>
+          <button
+            type="submit"
+            form="campaignForm"
+            disabled={templates.length === 0}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-50 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 transition-colors"
+          >
+            {campaign ? 'Save Draft' : 'Create Campaign'}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300"
+        >
+          {error}
         </div>
+      )}
 
-        {error && (
-          <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
-            {error}
+      {templates.length === 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            No email templates available
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <p className="mt-1">
+            Create at least one email template on the Templates tab before creating a campaign.
+          </p>
+        </div>
+      ) : (
+        <form id="campaignForm" onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+            <label
+              htmlFor="campaign-name"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
               Campaign Name *
             </label>
             <input
+              id="campaign-name"
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Q4 District Leadership Outreach"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+              className={inputClass}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-              Select Email Template *
+            <label
+              htmlFor="campaign-template"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              Email Template *
             </label>
             <select
+              id="campaign-template"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+              className={inputClass}
             >
               {templates.map((tpl) => (
                 <option key={tpl.id} value={tpl.id}>
@@ -97,59 +175,65 @@ export function CampaignModal({ templates, onClose, onSaved }: CampaignModalProp
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              <label
+                htmlFor="campaign-audience"
+                className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+              >
                 Target Audience Tag
               </label>
               <select
+                id="campaign-audience"
                 value={targetAudienceTag}
                 onChange={(e) => setTargetAudienceTag(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                className={inputClass}
               >
                 <option value="all">All Audiences</option>
-                <option value="high_school">high_school</option>
-                <option value="district_admin">district_admin</option>
-                <option value="educators">educators</option>
-                <option value="nonprofit">nonprofit</option>
+                {audienceTags.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              <label
+                htmlFor="campaign-batch-size"
+                className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+              >
                 Batch Size (1-500)
               </label>
               <input
+                id="campaign-batch-size"
                 type="number"
                 min={1}
                 max={500}
                 value={batchSize}
-                onChange={(e) => setBatchSize(parseInt(e.target.value) || 50)}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+                onChange={(e) => setBatchSize(parseInt(e.target.value, 10) || 50)}
+                className={inputClass}
               />
             </div>
           </div>
 
-          <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-            <strong>Approval Notice:</strong> Campaigns are initialized in <code>draft</code> status. An approval by a Marketing Lead or Administrator is required before emails can be dispatched.
-          </div>
-
-          <div className="flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 shadow-sm"
-            >
-              Create Campaign
-            </button>
+          <div
+            className={`flex items-center gap-2 rounded-lg border p-3 text-xs ${
+              eligibleActiveCount > 0
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+                : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+            }`}
+          >
+            <Users className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>{eligibleActiveCount}</strong> active contact
+              {eligibleActiveCount === 1 ? '' : 's'} currently match this audience
+              {eligibleActiveCount === 0
+                ? ' (at least 1 active contact is required before approval).'
+                : '.'}
+            </span>
           </div>
         </form>
-      </div>
-    </div>
+      )}
+    </ModalShell>
   )
 }
