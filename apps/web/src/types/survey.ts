@@ -24,6 +24,7 @@ export interface SurveySubmission {
   first_name: string
   last_name: string
   organization: string
+  district?: string
   job_role: string
   audience_tag: SurveyAudienceOption
   grade_levels?: string[]

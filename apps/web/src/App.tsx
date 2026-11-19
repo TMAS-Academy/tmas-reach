@@ -229,6 +229,7 @@ export default function App() {
               contacts={contacts}
               campaigns={campaigns}
               userRole={currentUser.role}
+              onToast={addToast}
             />
           )}
 

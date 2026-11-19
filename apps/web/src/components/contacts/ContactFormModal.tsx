@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import type { Contact } from '../../types'
 import { store } from '../../lib/store'
-import { X } from 'lucide-react'
+import { ModalShell } from '../ui/ModalShell'
 
 interface ContactFormModalProps {
   contact?: Contact | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (message?: string) => void
 }
 
 export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModalProps) {
@@ -44,6 +44,7 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         setError(res.error || 'Failed to update contact.')
         return
       }
+      onSaved('Contact updated.')
     } else {
       const res = store.addContact({
         email: email.trim(),
@@ -60,162 +61,191 @@ export function ContactFormModal({ contact, onClose, onSaved }: ContactFormModal
         setError(res.error || 'Failed to create contact.')
         return
       }
+      onSaved('Contact added.')
     }
-
-    onSaved()
   }
 
+  const inputClass =
+    'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-            {contact ? 'Edit Contact' : 'Add New Contact'}
-          </h3>
+    <ModalShell
+      onClose={onClose}
+      title={contact ? 'Edit Contact' : 'Add Contact'}
+      size="md"
+      footer={
+        <>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
           >
-            <X className="h-5 w-5" />
+            Cancel
           </button>
+          <button
+            type="submit"
+            form="contactForm"
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-300 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 transition-colors"
+          >
+            {contact ? 'Save Changes' : 'Create Contact'}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300"
+        >
+          {error}
+        </div>
+      )}
+
+      <form id="contactForm" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label
+            htmlFor="contact-email"
+            className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+          >
+            Email Address *
+          </label>
+          <input
+            id="contact-email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g. educator@school.edu"
+            className={inputClass}
+          />
         </div>
 
-        {error && (
-          <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-              Email Address *
+            <label
+              htmlFor="contact-first-name"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              First Name
             </label>
             <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. educator@school.edu"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+              id="contact-first-name"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Maria"
+              className={inputClass}
             />
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                First Name
-              </label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="Maria"
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Last Name
-              </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Vasquez"
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Organization / School
-              </label>
-              <input
-                type="text"
-                value={organization}
-                onChange={(e) => setOrganization(e.target.value)}
-                placeholder="Lincoln High School"
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                School District
-              </label>
-              <input
-                type="text"
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                placeholder="Central Unified District"
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Job Role
-              </label>
-              <input
-                type="text"
-                value={jobRole}
-                onChange={(e) => setJobRole(e.target.value)}
-                placeholder="Math Department Chair"
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Audience Tag
-              </label>
-              <select
-                value={audienceTag}
-                onChange={(e) => setAudienceTag(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-              >
-                <option value="high_school">High School</option>
-                <option value="middle_school">Middle School</option>
-                <option value="district_admin">District Admin</option>
-                <option value="educators">Educators</option>
-                <option value="nonprofit">Nonprofit / Other</option>
-              </select>
-            </div>
-          </div>
-
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-              Notes & Interaction History
+            <label
+              htmlFor="contact-last-name"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              Last Name
             </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Spoke at STEM conference; requested geometry curriculum resources."
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+            <input
+              id="contact-last-name"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Vasquez"
+              className={inputClass}
             />
           </div>
+        </div>
 
-          <div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="contact-org"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              {contact ? 'Save Changes' : 'Create Contact'}
-            </button>
+              Organization / School
+            </label>
+            <input
+              id="contact-org"
+              type="text"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              placeholder="Lincoln High School"
+              className={inputClass}
+            />
           </div>
-        </form>
-      </div>
-    </div>
+          <div>
+            <label
+              htmlFor="contact-district"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              School District
+            </label>
+            <input
+              id="contact-district"
+              type="text"
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+              placeholder="Central Unified District"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="contact-role"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              Job Role
+            </label>
+            <input
+              id="contact-role"
+              type="text"
+              value={jobRole}
+              onChange={(e) => setJobRole(e.target.value)}
+              placeholder="Math Department Chair"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="contact-tag"
+              className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+            >
+              Audience Tag
+            </label>
+            <select
+              id="contact-tag"
+              value={audienceTag}
+              onChange={(e) => setAudienceTag(e.target.value)}
+              className={inputClass}
+            >
+              <option value="high_school">High School</option>
+              <option value="middle_school">Middle School</option>
+              <option value="district_admin">District Admin</option>
+              <option value="educators">Educators</option>
+              <option value="nonprofit">Nonprofit / Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="contact-notes"
+            className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+          >
+            Notes & Interaction History
+          </label>
+          <textarea
+            id="contact-notes"
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. Spoke at STEM conference; requested geometry curriculum resources."
+            className={inputClass}
+          />
+        </div>
+      </form>
+    </ModalShell>
   )
 }
